@@ -1,48 +1,70 @@
 <script setup>
-import { Head, Link } from '@inertiajs/vue3';
-import { onMounted } from 'vue';
+import { Head, Link } from '@inertiajs/vue3'
+import { onMounted, ref } from 'vue'
+import { useBluetoothPrinter } from '@/composables/useBluetoothPrinter'
 
 const props = defineProps({
     ticket: Object,
-});
+})
 
-const formatFCFA = (montant) => {
-    return new Intl.NumberFormat('fr-FR').format(montant || 0) + ' FCFA';
-};
+const { imprimerTicket, connecte, connexionEnCours, erreur, estPWA, bluetoothDisponible } = useBluetoothPrinter()
 
-const formatDate = (dateString) => {
-    return new Date(dateString).toLocaleDateString('fr-FR', {
-        day: '2-digit',
-        month: '2-digit',
-        year: 'numeric',
-    });
-};
+const impressionBTEnCours = ref(false)
+const impressionBTOk      = ref(false)
+const modePWA             = ref(false)
 
-const formatHeure = (dateString) => {
-    return new Date(dateString).toLocaleTimeString('fr-FR', {
-        hour: '2-digit',
-        minute: '2-digit',
-    });
-};
+// ─── Formatage ────────────────────────────────────────────────────────────────
+const formatFCFA = (montant) =>
+    new Intl.NumberFormat('fr-FR').format(montant || 0) + ' FCFA'
+
+const formatDate = (dateString) =>
+    new Date(dateString).toLocaleDateString('fr-FR', {
+        day: '2-digit', month: '2-digit', year: 'numeric',
+    })
+
+const formatHeure = (dateString) =>
+    new Date(dateString).toLocaleTimeString('fr-FR', {
+        hour: '2-digit', minute: '2-digit',
+    })
 
 const numeroFormate = (date, numero) => {
-    const d = new Date(date);
-    const yyyy = d.getFullYear();
-    const mm = String(d.getMonth() + 1).padStart(2, '0');
-    const dd = String(d.getDate()).padStart(2, '0');
-    const num = String(numero).padStart(4, '0');
-    return `${yyyy}${mm}${dd}-${num}`;
-};
+    const d = new Date(date)
+    const yyyy = d.getFullYear()
+    const mm   = String(d.getMonth() + 1).padStart(2, '0')
+    const dd   = String(d.getDate()).padStart(2, '0')
+    const num  = String(numero).padStart(4, '0')
+    return `${yyyy}${mm}${dd}-${num}`
+}
 
+// ─── Impression Bluetooth ─────────────────────────────────────────────────────
+const imprimerBluetooth = async () => {
+    impressionBTEnCours.value = true
+    impressionBTOk.value      = false
+
+    const ok = await imprimerTicket(props.ticket)
+
+    impressionBTEnCours.value = false
+    if (ok) impressionBTOk.value = true
+}
+
+// ─── Au montage : détecter PWA ou navigateur classique ───────────────────────
 onMounted(() => {
-    setTimeout(() => {
-        window.print();
-    }, 500);
-});
+    modePWA.value = estPWA()
+
+    if (!modePWA.value) {
+        // Mode bureau classique : impression automatique comme avant
+        setTimeout(() => window.print(), 500)
+    }
+    // Mode PWA : le caissier appuie manuellement sur "Imprimer via Bluetooth"
+})
 
 const reimprimer = () => {
-    window.print();
-};
+    if (modePWA.value) {
+        imprimerBluetooth()
+    } else {
+        window.print()
+    }
+}
 </script>
 
 <template>
@@ -52,8 +74,10 @@ const reimprimer = () => {
 
         <!-- ===== Barre d'actions (cachée à l'impression) ===== -->
         <div class="max-w-md mx-auto px-4 mb-4 print:hidden">
+
+            <!-- Confirmation vente -->
             <div class="bg-emerald-50 border border-emerald-200 rounded-xl p-4 flex items-start gap-3 mb-4">
-                <div class="text-emerald-600 text-2xl font-bold">OK</div>
+                <div class="text-emerald-600 text-2xl font-bold">✓</div>
                 <div class="flex-1">
                     <h3 class="font-semibold text-emerald-900">Ticket vendu avec succès</h3>
                     <p class="text-sm text-emerald-700">
@@ -62,14 +86,54 @@ const reimprimer = () => {
                 </div>
             </div>
 
+            <!-- ── Mode PWA : bouton Bluetooth ── -->
+            <div v-if="modePWA" class="space-y-3 mb-4">
+
+                <!-- Statut connexion BT -->
+                <div v-if="connecte" class="flex items-center gap-2 text-sm text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-lg px-3 py-2">
+                    <span class="inline-block w-2 h-2 rounded-full bg-emerald-500"></span>
+                    Imprimante Bluetooth connectée
+                </div>
+                <div v-else-if="!bluetoothDisponible()" class="flex items-center gap-2 text-sm text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+                    ⚠ Bluetooth non disponible — utilisez Chrome Android
+                </div>
+
+                <!-- Erreur BT -->
+                <div v-if="erreur" class="text-sm text-red-700 bg-red-50 border border-red-200 rounded-lg px-3 py-2">
+                    {{ erreur }}
+                </div>
+
+                <!-- Confirmation impression OK -->
+                <div v-if="impressionBTOk" class="flex items-center gap-2 text-sm text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-lg px-3 py-2">
+                    ✓ Ticket imprimé avec succès
+                </div>
+
+                <!-- Bouton principal Bluetooth -->
+                <button
+                    v-if="bluetoothDisponible()"
+                    @click="imprimerBluetooth"
+                    :disabled="impressionBTEnCours"
+                    class="w-full px-4 py-4 rounded-xl font-semibold text-white transition text-base"
+                    :class="impressionBTEnCours
+                        ? 'bg-gray-400 cursor-not-allowed'
+                        : 'bg-blue-600 active:bg-blue-800'"
+                >
+                    <span v-if="impressionBTEnCours">Impression en cours...</span>
+                    <span v-else-if="!connecte">🖨 Connecter et imprimer</span>
+                    <span v-else>🖨 Réimprimer</span>
+                </button>
+            </div>
+
+            <!-- ── Boutons navigation ── -->
             <div class="flex gap-2">
                 <Link
                     :href="route('tickets.vendre')"
-                    class="flex-1 px-4 py-3 bg-emerald-600 hover:bg-emerald-700 text-white text-center rounded-lg font-semibold transition"
+                    class="flex-1 px-4 py-3 bg-emerald-600 active:bg-emerald-800 text-white text-center rounded-lg font-semibold transition"
                 >
                     Nouveau ticket
                 </Link>
                 <button
+                    v-if="!modePWA"
                     @click="reimprimer"
                     class="px-4 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-semibold transition"
                 >
@@ -77,7 +141,7 @@ const reimprimer = () => {
                 </button>
                 <Link
                     :href="route('dashboard')"
-                    class="px-4 py-3 bg-gray-200 hover:bg-gray-300 text-gray-700 rounded-lg font-medium transition"
+                    class="px-4 py-3 bg-gray-200 active:bg-gray-300 text-gray-700 rounded-lg font-medium transition"
                 >
                     Retour
                 </Link>
@@ -88,7 +152,7 @@ const reimprimer = () => {
         <div class="max-w-md mx-auto bg-white shadow-lg print:shadow-none print:max-w-none">
             <div class="p-8 print:p-4">
 
-                <!-- En-tête Boulal en dur -->
+                <!-- En-tête -->
                 <div class="text-center pb-4 border-b-2 border-dashed border-gray-300">
                     <h1 class="text-xl font-bold text-gray-900 mb-1 leading-tight">POSTE DE SANTÉ DE BOULAL</h1>
                     <p class="text-xs text-gray-500 mb-2">PS Boulal</p>
@@ -120,27 +184,18 @@ const reimprimer = () => {
                     </div>
                 </div>
 
-                <!-- Patient (uniquement si renseigné) -->
+                <!-- Patient (si renseigné) -->
                 <div v-if="ticket.patient_nom" class="py-4 border-t-2 border-dashed border-gray-300">
                     <p class="text-xs text-gray-500 mb-2">PATIENT</p>
                     <p class="text-base font-semibold text-gray-900">
                         {{ ticket.patient_prenom }} {{ ticket.patient_nom }}
                     </p>
-                    <div v-if="ticket.patient_age" class="flex justify-between text-sm mt-2">
-                        <span class="text-gray-600">Âge</span>
-                        <span class="font-medium text-gray-900">{{ ticket.patient_age }} ans</span>
-                    </div>
-                    <div v-if="ticket.patient_adresse" class="flex justify-between text-sm mt-1">
-                        <span class="text-gray-600">Adresse</span>
-                        <span class="font-medium text-gray-900 text-right">{{ ticket.patient_adresse }}</span>
-                    </div>
                 </div>
 
                 <!-- Prestation -->
                 <div class="py-4 border-t-2 border-dashed border-gray-300">
                     <p class="text-xs text-gray-500 mb-2">PRESTATION</p>
                     <p class="text-lg font-semibold text-gray-900 mb-3">{{ ticket.ticket_type.libelle }}</p>
-
                     <div class="bg-gray-50 rounded-lg p-3 flex justify-between items-center">
                         <span class="text-sm text-gray-600">Montant payé</span>
                         <span class="text-2xl font-bold text-emerald-600">

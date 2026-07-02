@@ -271,13 +271,10 @@ class CashSessionController extends Controller
             ->where('tenant_id', $user->tenant_id)
             ->firstOrFail();
 
-        // Sécurité : caissier/pharmacien ne voit que ses propres rapports
         if (in_array($user->role, ['caissier', 'pharmacien']) && $session->user_id !== $user->id) {
             abort(403);
         }
 
-        // 🔧 FIX BUG : Sérialisation EXPLICITE des dates en ISO 8601
-        // Évite les confusions entre ouverte_le et fermee_le
         return Inertia::render('Caisse/Rapport', [
             'session' => [
                 'id' => $session->id,
@@ -289,7 +286,6 @@ class CashSessionController extends Controller
                 'fond_caisse_initial' => (float) $session->fond_caisse_initial,
                 'montant_compte' => $session->montant_compte !== null ? (float) $session->montant_compte : null,
                 'ecart' => $session->ecart !== null ? (float) $session->ecart : null,
-                // Dates explicitement formatées en ISO 8601 (JavaScript-friendly)
                 'ouverte_le' => $session->ouverte_le?->toIso8601String(),
                 'fermee_le' => $session->fermee_le?->toIso8601String(),
                 'created_at' => $session->created_at?->toIso8601String(),
