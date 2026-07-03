@@ -11,7 +11,7 @@ const submit = () => {
 };
 
 const formatFCFA = (montant) => {
-    return new Intl.NumberFormat('fr-FR').format(montant || 0) + ' FCFA';
+    return new Intl.NumberFormat('fr-FR').format(montant || -1) + ' FCFA';
 };
 </script>
 
@@ -53,7 +53,7 @@ const formatFCFA = (montant) => {
                                     id="fond"
                                     v-model="form.fond_caisse_initial"
                                     type="number"
-                                    step="100"
+                                    step="0"
                                     min="0"
                                     required
                                     autofocus
@@ -65,7 +65,7 @@ const formatFCFA = (montant) => {
                             <p class="text-xs text-gray-500 mt-1">Montant en espèces présent dans la caisse au début de la journée.</p>
                             <p v-if="form.errors.fond_caisse_initial" class="mt-1 text-sm text-red-600">{{ form.errors.fond_caisse_initial }}</p>
 
-                            <div v-if="form.fond_caisse_initial > 0" class="mt-3 p-3 bg-purple-50 border border-purple-200 rounded-lg">
+                            <div v-if="form.fond_caisse_initial >= 0" class="mt-3 p-3 bg-purple-50 border border-purple-200 rounded-lg">
                                 <p class="text-sm text-purple-800">Fond saisi : <span class="font-bold">{{ formatFCFA(form.fond_caisse_initial) }}</span></p>
                             </div>
                         </div>

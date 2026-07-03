@@ -23,13 +23,13 @@ export default defineConfig({
 
         VitePWA({
             registerType: 'autoUpdate',
-            manifest: false, // on utilise public/manifest.webmanifest directement
+            manifest: false,
             workbox: {
                 globPatterns: ['**/*.{js,css,ico,png,svg,woff2}'],
                 navigateFallback: null,
                 runtimeCaching: [
                     {
-                        // Ne jamais mettre en cache les requêtes Inertia (X-Inertia header)
+
                         urlPattern: ({ request }) =>
                             request.mode === 'navigate' &&
                             !request.headers.get('X-Inertia'),

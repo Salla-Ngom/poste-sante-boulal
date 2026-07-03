@@ -10,6 +10,7 @@ use App\Models\TicketType;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Http;
 use Inertia\Inertia;
 
 class TicketController extends Controller
@@ -231,5 +232,63 @@ class TicketController extends Controller
                 'user_id' => $request->input('user_id', ''),
             ],
         ]);
+    }
+
+    /**
+     * Envoyer un ticket à l'application Flutter Bridge pour impression Bluetooth
+     */
+    public function printBluetooth($id)
+    {
+        $user = auth()->user();
+
+        $ticket = Ticket::with(['ticketType', 'user', 'tenant'])
+            ->where('id', $id)
+            ->where('tenant_id', $user->tenant_id)
+            ->firstOrFail();
+
+        // Préparer les données pour Flutter
+        $data = [
+            'numero' => $ticket->numero,
+            'date_emission' => $ticket->date_emission,
+            'emis_le' => $ticket->emis_le,
+            'prix_paye' => $ticket->prix_paye,
+            'ticket_type' => [
+                'libelle' => $ticket->ticketType->libelle,
+            ],
+            'user' => [
+                'name' => $ticket->user->name,
+            ],
+            'tenant' => [
+                'nom' => $ticket->tenant->nom ?? 'POSTE DE SANTE DE BOULAL',
+            ],
+        ];
+
+        // Configuration de l'IP du mobile qui exécute Flutter Bridge
+        $mobileIp = config('app.flutter_bridge_ip', '192.168.0.100');
+        $port = config('app.flutter_bridge_port', 8080);
+
+        try {
+            $response = Http::timeout(10)->post("http://{$mobileIp}:{$port}/print", $data);
+
+            if ($response->successful()) {
+                return response()->json([
+                    'success' => true,
+                    'message' => 'Ticket envoyé à l\'imprimante',
+                    'details' => $response->json()
+                ]);
+            } else {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Erreur lors de l\'impression',
+                    'details' => $response->body()
+                ], 500);
+            }
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Impossible de contacter le service d\'impression',
+                'error' => $e->getMessage()
+            ], 500);
+        }
     }
 }

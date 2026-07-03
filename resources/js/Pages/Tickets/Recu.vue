@@ -1,17 +1,22 @@
 <script setup>
 import { Head, Link } from '@inertiajs/vue3'
 import { onMounted, ref } from 'vue'
-import { useBluetoothPrinter } from '@/composables/useBluetoothPrinter'
+import axios from 'axios'
 
 const props = defineProps({
     ticket: Object,
 })
 
-const { imprimerTicket, connecte, connexionEnCours, erreur, estPWA, bluetoothDisponible } = useBluetoothPrinter()
-
 const impressionBTEnCours = ref(false)
 const impressionBTOk      = ref(false)
+const impressionErreur   = ref(null)
 const modePWA             = ref(false)
+const bluetoothDisponible = ref(false)
+
+// ─── Détection PWA ────────────────────────────────────────────────────────────
+const estPWA = () =>
+    window.matchMedia('(display-mode: standalone)').matches ||
+    window.navigator.standalone === true
 
 // ─── Formatage ────────────────────────────────────────────────────────────────
 const formatFCFA = (montant) =>
@@ -36,26 +41,40 @@ const numeroFormate = (date, numero) => {
     return `${yyyy}${mm}${dd}-${num}`
 }
 
-// ─── Impression Bluetooth ─────────────────────────────────────────────────────
+// ─── Impression via Flutter Bridge ──────────────────────────────────────────
 const imprimerBluetooth = async () => {
     impressionBTEnCours.value = true
     impressionBTOk.value      = false
+    impressionErreur.value    = null
 
-    const ok = await imprimerTicket(props.ticket)
+    try {
+        const response = await axios.post(
+            `/api/tickets/${props.ticket.id}/print-bluetooth`
+        )
 
-    impressionBTEnCours.value = false
-    if (ok) impressionBTOk.value = true
+        if (response.data.success) {
+            impressionBTOk.value = true
+        } else {
+            impressionErreur.value = response.data.message || 'Erreur d\'impression'
+        }
+    } catch (error) {
+        impressionErreur.value = error.response?.data?.message ||
+                                 'Impossible de contacter le service d\'impression'
+        console.error('Erreur impression:', error)
+    } finally {
+        impressionBTEnCours.value = false
+    }
 }
 
-// ─── Au montage : détecter PWA ou navigateur classique ───────────────────────
+// ─── Au montage ──────────────────────────────────────────────────────────────
 onMounted(() => {
     modePWA.value = estPWA()
+    bluetoothDisponible.value = typeof navigator !== 'undefined' &&
+                                typeof navigator.bluetooth !== 'undefined'
 
     if (!modePWA.value) {
-        // Mode bureau classique : impression automatique comme avant
         setTimeout(() => window.print(), 500)
     }
-    // Mode PWA : le caissier appuie manuellement sur "Imprimer via Bluetooth"
 })
 
 const reimprimer = () => {
@@ -89,28 +108,27 @@ const reimprimer = () => {
             <!-- ── Mode PWA : bouton Bluetooth ── -->
             <div v-if="modePWA" class="space-y-3 mb-4">
 
-                <!-- Statut connexion BT -->
-                <div v-if="connecte" class="flex items-center gap-2 text-sm text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-lg px-3 py-2">
+                <!-- Statut -->
+                <div v-if="bluetoothDisponible" class="flex items-center gap-2 text-sm text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-lg px-3 py-2">
                     <span class="inline-block w-2 h-2 rounded-full bg-emerald-500"></span>
-                    Imprimante Bluetooth connectée
+                    Prêt pour l'impression Bluetooth
                 </div>
-                <div v-else-if="!bluetoothDisponible()" class="flex items-center gap-2 text-sm text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+                <div v-else class="flex items-center gap-2 text-sm text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
                     ⚠ Bluetooth non disponible — utilisez Chrome Android
                 </div>
 
-                <!-- Erreur BT -->
-                <div v-if="erreur" class="text-sm text-red-700 bg-red-50 border border-red-200 rounded-lg px-3 py-2">
-                    {{ erreur }}
+                <!-- Erreur -->
+                <div v-if="impressionErreur" class="text-sm text-red-700 bg-red-50 border border-red-200 rounded-lg px-3 py-2">
+                    ⚠ {{ impressionErreur }}
                 </div>
 
-                <!-- Confirmation impression OK -->
+                <!-- Confirmation OK -->
                 <div v-if="impressionBTOk" class="flex items-center gap-2 text-sm text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-lg px-3 py-2">
                     ✓ Ticket imprimé avec succès
                 </div>
 
-                <!-- Bouton principal Bluetooth -->
+                <!-- Bouton principal -->
                 <button
-                    v-if="bluetoothDisponible()"
                     @click="imprimerBluetooth"
                     :disabled="impressionBTEnCours"
                     class="w-full px-4 py-4 rounded-xl font-semibold text-white transition text-base"
@@ -119,8 +137,7 @@ const reimprimer = () => {
                         : 'bg-blue-600 active:bg-blue-800'"
                 >
                     <span v-if="impressionBTEnCours">Impression en cours...</span>
-                    <span v-else-if="!connecte">🖨 Connecter et imprimer</span>
-                    <span v-else>🖨 Réimprimer</span>
+                    <span v-else>🖨 Imprimer le ticket</span>
                 </button>
             </div>
 
@@ -159,7 +176,7 @@ const reimprimer = () => {
                     <p class="text-sm text-gray-700 font-semibold tracking-wider">REÇU DE PAIEMENT</p>
                 </div>
 
-                <!-- Numéro de ticket -->
+                <!-- Numéro -->
                 <div class="text-center py-6">
                     <p class="text-xs text-gray-500 mb-1">Numéro de ticket</p>
                     <p class="text-3xl font-bold text-gray-900 tracking-wider">
@@ -182,14 +199,6 @@ const reimprimer = () => {
                         <span class="text-gray-600">Caissier</span>
                         <span class="font-medium text-gray-900">{{ ticket.user.name }}</span>
                     </div>
-                </div>
-
-                <!-- Patient (si renseigné) -->
-                <div v-if="ticket.patient_nom" class="py-4 border-t-2 border-dashed border-gray-300">
-                    <p class="text-xs text-gray-500 mb-2">PATIENT</p>
-                    <p class="text-base font-semibold text-gray-900">
-                        {{ ticket.patient_prenom }} {{ ticket.patient_nom }}
-                    </p>
                 </div>
 
                 <!-- Prestation -->

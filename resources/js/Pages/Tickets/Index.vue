@@ -83,7 +83,7 @@ const nombreFiltresActifs = computed(() => {
         <div class="py-8">
             <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-6">
 
-                <!-- ===== Statistiques rapides (2 cartes au lieu de 4) ===== -->
+                <!-- ===== Statistiques rapides ===== -->
                 <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div class="bg-white rounded-xl border border-gray-100 shadow-sm p-5">
                         <p class="text-xs text-gray-500 mb-1">Total période</p>
