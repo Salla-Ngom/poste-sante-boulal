@@ -1,0 +1,724 @@
+diff --git a/app/Http/Controllers/TicketController.php b/app/Http/Controllers/TicketController.php
+index f22d9f2..b97f75c 100644
+--- a/app/Http/Controllers/TicketController.php
++++ b/app/Http/Controllers/TicketController.php
+@@ -10,7 +10,6 @@
+ use Illuminate\Http\Request;
+ use Illuminate\Support\Carbon;
+ use Illuminate\Support\Facades\DB;
+-use Illuminate\Support\Facades\Http;
+ use Inertia\Inertia;
+ 
+ class TicketController extends Controller
+@@ -234,61 +233,4 @@ public function index(Request $request)
+         ]);
+     }
+ 
+-    /**
+-     * Envoyer un ticket à l'application Flutter Bridge pour impression Bluetooth
+-     */
+-    public function printBluetooth($id)
+-    {
+-        $user = auth()->user();
+-
+-        $ticket = Ticket::with(['ticketType', 'user', 'tenant'])
+-            ->where('id', $id)
+-            ->where('tenant_id', $user->tenant_id)
+-            ->firstOrFail();
+-
+-        // Préparer les données pour Flutter
+-        $data = [
+-            'numero' => $ticket->numero,
+-            'date_emission' => $ticket->date_emission,
+-            'emis_le' => $ticket->emis_le,
+-            'prix_paye' => $ticket->prix_paye,
+-            'ticket_type' => [
+-                'libelle' => $ticket->ticketType->libelle,
+-            ],
+-            'user' => [
+-                'name' => $ticket->user->name,
+-            ],
+-            'tenant' => [
+-                'nom' => $ticket->tenant->nom ?? 'POSTE DE SANTE DE BOULAL',
+-            ],
+-        ];
+-
+-        // Configuration de l'IP du mobile qui exécute Flutter Bridge
+-        $mobileIp = config('app.flutter_bridge_ip', '192.168.0.100');
+-        $port = config('app.flutter_bridge_port', 8080);
+-
+-        try {
+-            $response = Http::timeout(10)->post("http://{$mobileIp}:{$port}/print", $data);
+-
+-            if ($response->successful()) {
+-                return response()->json([
+-                    'success' => true,
+-                    'message' => 'Ticket envoyé à l\'imprimante',
+-                    'details' => $response->json()
+-                ]);
+-            } else {
+-                return response()->json([
+-                    'success' => false,
+-                    'message' => 'Erreur lors de l\'impression',
+-                    'details' => $response->body()
+-                ], 500);
+-            }
+-        } catch (\Exception $e) {
+-            return response()->json([
+-                'success' => false,
+-                'message' => 'Impossible de contacter le service d\'impression',
+-                'error' => $e->getMessage()
+-            ], 500);
+-        }
+-    }
+ }
+diff --git a/config/app.php b/config/app.php
+index a868acf..d45a948 100644
+--- a/config/app.php
++++ b/config/app.php
+@@ -117,14 +117,6 @@
+     | Supported drivers: "file", "cache"
+     |
+     */
+-        /*
+-    |--------------------------------------------------------------------------
+-    | Flutter Bridge Configuration
+-    |--------------------------------------------------------------------------
+-    */
+-    'flutter_bridge_ip' => env('FLUTTER_BRIDGE_IP', '192.168.0.100'),
+-    'flutter_bridge_port' => env('FLUTTER_BRIDGE_PORT', 8080),
+-
+     'maintenance' => [
+         'driver' => env('APP_MAINTENANCE_DRIVER', 'file'),
+         'store' => env('APP_MAINTENANCE_STORE', 'database'),
+diff --git a/git b/git
+deleted file mode 100644
+index e69de29..0000000
+diff --git a/main b/main
+deleted file mode 100644
+index e69de29..0000000
+diff --git a/public/icons/icon-192.png b/public/icons/icon-192.png
+new file mode 100644
+index 0000000000000000000000000000000000000000..9806d10c04fcc10d9bba8a3fa69d28546cc62d9c
+GIT binary patch
+literal 721
+zcmeAS@N?(olHy`uVBq!ia0vp^2SAvE2}s`E_d9@rfoX=Pi(^Q|oVRxk^KLr`I0RaG
+z6oo%`I2RkdG(h-9tQ{wx;rp*b9S^VPZC$-xUj9A%pY{3W_6+CM6oeQja&)*js4yuB
+z3UoGju(&AEOz7nI-SQ9W>hIZ~I$r<pU+J~UHWzO{v!B!b@=tcITlMx0!mlm=-j++r
+zbO_(`elD*rZ^z~wo)^28COuTzVyNJ!LXo?C_RD8H%>2AwE#A(=T;XMnk@4b%(KD*{
+z&9a=_$#{0o6&7Z7V?zbGlo$u*`jo{!v(N8ns1PG5XdW}os;tTD%ls@UE^yw+a6zX1
+zCQCNIv?Pb)Cp_=wJ@a`Mx9)?{TbaAMY0Ewv*)GtIk$U=MdTr~%XbFEsio6C2q{pvs
+z^Bt47W`5-2&AcmVWyFp@GTF>l=j!fTzqTy9$N$B1k6uQul|GZw&E2hqTqOC6qJ(iW
+Z{@FyQ*=#>EwgQtXgQu&X%Q~loCIH$~<Ocu%
+
+literal 0
+HcmV?d00001
+
+diff --git a/public/icons/icon-512.png b/public/icons/icon-512.png
+new file mode 100644
+index 0000000000000000000000000000000000000000..d278dff5c85bac7286456aa4c35bbea13f6056a7
+GIT binary patch
+literal 2257
+zcmeAS@N?(olHy`uVBq!ia0y~yU;;9k7&t&wwUqN(1_q89o-U3d6?5L+bj*vf<Z(Dy
+zVel>XHhb3ntE+RGc_ti*?9te_O4x(p==ZmEm9=*J7%zN2|B{)ZppAjSg_FTy$|yC&
+zg5b*j<@^lwk3WC3sco6Rw|38bJEoemr(b_A{KfNOIorFx|AUzF6dCS3?7I42Su(+n
+zF=5y1u>buj4JZF_oXH5!|DXST{`|Wv4Li$n&dY93P-RS5;agpNIrfGN!;Fmk$L^FX
+ziwQ6sySYny`@QaJPKM2I?oHaAf4r21LBWebV#$Zbm>tU71sEDM7!$hAEiZh&j7Ob;
+zA&`kdK$W2<;P-luxBJehzyzS;BZksnfByJO;}5L!`=7s5KCpfdIBx2_7~UnkFP2rE
+z;m@#a^RJz=czo0tiX;E7QDip$DOjO#d%o|P&pu2B6R#h#TUMpOC~@36QG2s(FT<Hf
+zts7=@%DXbKeKgZBcwWqLKqQV;c3CY4BSVK!gJ6w7VDd9{a7<X7UoPOQ_TK^|0g4%m
+zGw}zf%>2I@9A^xR20!&+!}k8~m)#qZ&-{-BCnaE#DVVpvDbwiZac~*c^B}lG%GkaU
+zR9GDlvFmtY@Yb2*fI=KA>$4g@#u-O%CzuP{busijZrw2T<~%nBwNHLGj)(B8FgRE0
+z<|NHauL72Qe)AjSf7aOe%QOC)ch!C-!yQMq9er2r=QG5(aY~%Kx4(nIz{wy-O!fFr
+zK?z`59}3|H%9B)er^LgzkN<uV{1?9Ux6x!+&0ygAe81A%*+z4~0?i_Jz1-zb#K7@%
+zX47xx%I|M?^f4HmyQaJIYup`gP${wwQi`<Q+G1#ax78O^*t|IlDQvdf-v0dU^Yrc0
+zuRnkMMe@OSJNfgM-G4}}p8u1jVRp<!#?|wqIT*sFBABY@zvci|Px6h7Lm&ZDJtC+Y
+fs{>-#E9-~v*BYx_F5dxcsxWxE`njxgN@xNA2(S#u
+
+literal 0
+HcmV?d00001
+
+diff --git a/public/icons/icon-72.png b/public/icons/icon-72.png
+new file mode 100644
+index 0000000000000000000000000000000000000000..ea9e0b70c18926f2e83cb0c13671a4a186e72623
+GIT binary patch
+literal 244
+zcmeAS@N?(olHy`uVBq!ia0vp^9w5xY1SD_us|Wz8-JULvAr*7p-n8axHV|RGC@}Gj
+zs2EGN?^H99nlBI7dQF#?CbI3WXnJSL+b?GOzOF&!a0bs}!=7UXQZU9WyS)d~XIz_h
+z@AHh?=G95kp}SYBn^ueRB2>LRwSVHG$@kXZS`%ZlaewI4?^)lpq}-AvdJ|3BbY1t)
+ziQN=lyTmG~JmbV(h4o4x(TfsbY1P|{6G|qX<2z{nN$V0s2rg$5f90s;d|Bt}bwF=0
+Nc)I$ztaD0e0svukU*`Y-
+
+literal 0
+HcmV?d00001
+
+diff --git a/public/icons/icon-96.png b/public/icons/icon-96.png
+new file mode 100644
+index 0000000000000000000000000000000000000000..4abfaa6c3f0d6975e769c72e35731bb29659c1bb
+GIT binary patch
+literal 373
+zcmeAS@N?(olHy`uVBq!ia0vp^2_VeD1SE5RJ;-NZV6^dcaSW-L^Y+$3ufqWX4i`gK
+z{g1L=@o%-Zc$0LtKbODyA=}qFYSWK5^H|!(>qpmpGqF8zQIvy=g|&&vv2lSzfP#jA
+z2u^OnJh_DG{W0(DKYaT3%Y5=3lbWW8^ykL=(~U0tGndb~B8$@)i?x3z)|8chPJP&y
+z`;^nlV{YzCmD5bJ%g-$j{anJ1VRJ&{f}8aQ`=U+HpAs&a<HoHXx#wNQ3FrHhgTL->
+z#_7t*jo<PO*vx$ot7n{_eg54;HSx6nPUU#~gW}r<%y%}co@bpK`V|<Q44$rjF6*2U
+FngAE7e#Za+
+
+literal 0
+HcmV?d00001
+
+diff --git a/public/manifest.webmanifest b/public/manifest.webmanifest
+index e69de29..eb5903c 100644
+--- a/public/manifest.webmanifest
++++ b/public/manifest.webmanifest
+@@ -0,0 +1,36 @@
++{
++    "name": "CaissePro Santé — Boulal",
++    "short_name": "Caisse Boulal",
++    "description": "Gestion caisse du Poste de Santé de Boulal",
++    "theme_color": "#059669",
++    "background_color": "#ffffff",
++    "display": "standalone",
++    "orientation": "portrait",
++    "start_url": "./dashboard",
++    "scope": "./",
++    "lang": "fr",
++    "icons": [
++        {
++            "src": "icons/icon-72.png",
++            "sizes": "72x72",
++            "type": "image/png"
++        },
++        {
++            "src": "icons/icon-96.png",
++            "sizes": "96x96",
++            "type": "image/png"
++        },
++        {
++            "src": "icons/icon-192.png",
++            "sizes": "192x192",
++            "type": "image/png",
++            "purpose": "any maskable"
++        },
++        {
++            "src": "icons/icon-512.png",
++            "sizes": "512x512",
++            "type": "image/png",
++            "purpose": "any maskable"
++        }
++    ]
++}
+diff --git a/resources/js/Pages/Tickets/Recu.vue b/resources/js/Pages/Tickets/Recu.vue
+index 147e5dd..7cfb806 100644
+--- a/resources/js/Pages/Tickets/Recu.vue
++++ b/resources/js/Pages/Tickets/Recu.vue
+@@ -1,22 +1,15 @@
+ <script setup>
+ import { Head, Link } from '@inertiajs/vue3'
+ import { onMounted, ref } from 'vue'
+-import axios from 'axios'
+ 
+ const props = defineProps({
+     ticket: Object,
+ })
+ 
+-const impressionBTEnCours = ref(false)
+-const impressionBTOk      = ref(false)
+-const impressionErreur   = ref(null)
+-const modePWA             = ref(false)
+-const bluetoothDisponible = ref(false)
+-
+-// ─── Détection PWA ────────────────────────────────────────────────────────────
+-const estPWA = () =>
+-    window.matchMedia('(display-mode: standalone)').matches ||
+-    window.navigator.standalone === true
++const impressionEnCours = ref(false)
++const impressionOk      = ref(false)
++const impressionErreur  = ref(null)
++const modeFlutter       = ref(false)
+ 
+ // ─── Formatage ────────────────────────────────────────────────────────────────
+ const formatFCFA = (montant) =>
+@@ -41,49 +34,71 @@ const numeroFormate = (date, numero) => {
+     return `${yyyy}${mm}${dd}-${num}`
+ }
+ 
+-// ─── Impression via Flutter Bridge ──────────────────────────────────────────
+-const imprimerBluetooth = async () => {
+-    impressionBTEnCours.value = true
+-    impressionBTOk.value      = false
+-    impressionErreur.value    = null
++// ─── Impression via le pont Flutter (window.AndroidPrinter) ─────────────────
++// L'app Flutter WebView injecte window.AndroidPrinter dans la page.
++// AndroidPrinter.print(json) retourne une Promise {success, message}.
++const imprimerFlutter = async () => {
++    impressionEnCours.value = true
++    impressionOk.value      = false
++    impressionErreur.value  = null
+ 
+     try {
+-        const response = await axios.post(
+-            `/api/tickets/${props.ticket.id}/print-bluetooth`
++        const result = await window.AndroidPrinter.print(
++            JSON.stringify(props.ticket)
+         )
+-
+-        if (response.data.success) {
+-            impressionBTOk.value = true
++        if (result && result.success) {
++            impressionOk.value = true
+         } else {
+-            impressionErreur.value = response.data.message || 'Erreur d\'impression'
++            impressionErreur.value =
++                (result && result.message) || "Échec de l'impression"
+         }
+-    } catch (error) {
+-        impressionErreur.value = error.response?.data?.message ||
+-                                 'Impossible de contacter le service d\'impression'
+-        console.error('Erreur impression:', error)
++    } catch (e) {
++        impressionErreur.value = 'Erreur : ' + (e.message || e)
+     } finally {
+-        impressionBTEnCours.value = false
++        impressionEnCours.value = false
+     }
+ }
+ 
+-// ─── Au montage ──────────────────────────────────────────────────────────────
+-onMounted(() => {
+-    modePWA.value = estPWA()
+-    bluetoothDisponible.value = typeof navigator !== 'undefined' &&
+-                                typeof navigator.bluetooth !== 'undefined'
+-
+-    if (!modePWA.value) {
+-        setTimeout(() => window.print(), 500)
+-    }
+-})
+-
+-const reimprimer = () => {
+-    if (modePWA.value) {
+-        imprimerBluetooth()
++// ─── Point d'entrée : Flutter → Bluetooth, sinon → window.print() ───────────
++const imprimer = () => {
++    if (window.AndroidPrinter) {
++        modeFlutter.value = true
++        imprimerFlutter()
+     } else {
+         window.print()
+     }
+ }
++
++// ─── Au montage : impression automatique ────────────────────────────────────
++// Gestion de la course au chargement : le pont Flutter peut arriver
++// quelques ms après le montage de Vue. On attend brièvement avant
++// de basculer sur window.print() (mode PC).
++onMounted(() => {
++    setTimeout(() => {
++        if (window.AndroidPrinter) {
++            modeFlutter.value = true
++            imprimerFlutter()
++            return
++        }
++
++        let lance = false
++        const onReady = () => {
++            lance = true
++            modeFlutter.value = true
++            imprimerFlutter()
++        }
++        window.addEventListener('androidprinter-ready', onReady, { once: true })
++
++        setTimeout(() => {
++            if (!lance && !window.AndroidPrinter) {
++                window.removeEventListener('androidprinter-ready', onReady)
++                window.print()
++            }
++        }, 800)
++    }, 300)
++})
++
++const reimprimer = () => imprimer()
+ </script>
+ 
+ <template>
+@@ -105,60 +120,44 @@ const reimprimer = () => {
+                 </div>
+             </div>
+ 
+-            <!-- ── Mode PWA : bouton Bluetooth ── -->
+-            <div v-if="modePWA" class="space-y-3 mb-4">
+-
+-                <!-- Statut -->
+-                <div v-if="bluetoothDisponible" class="flex items-center gap-2 text-sm text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-lg px-3 py-2">
+-                    <span class="inline-block w-2 h-2 rounded-full bg-emerald-500"></span>
+-                    Prêt pour l'impression Bluetooth
+-                </div>
+-                <div v-else class="flex items-center gap-2 text-sm text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+-                    ⚠ Bluetooth non disponible — utilisez Chrome Android
+-                </div>
++            <!-- ── Statut impression Bluetooth (app Flutter) ── -->
++            <div v-if="modeFlutter" class="space-y-3 mb-4">
+ 
+-                <!-- Erreur -->
+-                <div v-if="impressionErreur" class="text-sm text-red-700 bg-red-50 border border-red-200 rounded-lg px-3 py-2">
+-                    ⚠ {{ impressionErreur }}
++                <div v-if="impressionEnCours" class="flex items-center gap-3 text-sm text-blue-800 bg-blue-50 border border-blue-200 rounded-lg px-4 py-3">
++                    <svg class="animate-spin h-5 w-5 text-blue-600" viewBox="0 0 24 24" fill="none">
++                        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/>
++                        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/>
++                    </svg>
++                    Impression Bluetooth en cours...
+                 </div>
+ 
+-                <!-- Confirmation OK -->
+-                <div v-if="impressionBTOk" class="flex items-center gap-2 text-sm text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-lg px-3 py-2">
++                <div v-if="impressionOk" class="flex items-center gap-2 text-sm text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-lg px-4 py-3">
+                     ✓ Ticket imprimé avec succès
+                 </div>
+ 
+-                <!-- Bouton principal -->
+-                <button
+-                    @click="imprimerBluetooth"
+-                    :disabled="impressionBTEnCours"
+-                    class="w-full px-4 py-4 rounded-xl font-semibold text-white transition text-base"
+-                    :class="impressionBTEnCours
+-                        ? 'bg-gray-400 cursor-not-allowed'
+-                        : 'bg-blue-600 active:bg-blue-800'"
+-                >
+-                    <span v-if="impressionBTEnCours">Impression en cours...</span>
+-                    <span v-else>🖨 Imprimer le ticket</span>
+-                </button>
++                <div v-if="impressionErreur" class="text-sm text-red-700 bg-red-50 border border-red-200 rounded-lg px-4 py-3">
++                    {{ impressionErreur }}
++                </div>
+             </div>
+ 
+             <!-- ── Boutons navigation ── -->
+             <div class="flex gap-2">
+                 <Link
+                     :href="route('tickets.vendre')"
+-                    class="flex-1 px-4 py-3 bg-emerald-600 active:bg-emerald-800 text-white text-center rounded-lg font-semibold transition"
++                    class="flex-1 px-4 py-3 bg-emerald-600 active:bg-emerald-800 hover:bg-emerald-700 text-white text-center rounded-lg font-semibold transition"
+                 >
+                     Nouveau ticket
+                 </Link>
+                 <button
+-                    v-if="!modePWA"
+                     @click="reimprimer"
+-                    class="px-4 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-semibold transition"
++                    :disabled="impressionEnCours"
++                    class="px-4 py-3 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-400 text-white rounded-lg font-semibold transition"
+                 >
+                     Réimprimer
+                 </button>
+                 <Link
+                     :href="route('dashboard')"
+-                    class="px-4 py-3 bg-gray-200 active:bg-gray-300 text-gray-700 rounded-lg font-medium transition"
++                    class="px-4 py-3 bg-gray-200 hover:bg-gray-300 text-gray-700 rounded-lg font-medium transition"
+                 >
+                     Retour
+                 </Link>
+@@ -176,7 +175,7 @@ const reimprimer = () => {
+                     <p class="text-sm text-gray-700 font-semibold tracking-wider">REÇU DE PAIEMENT</p>
+                 </div>
+ 
+-                <!-- Numéro -->
++                <!-- Numéro de ticket -->
+                 <div class="text-center py-6">
+                     <p class="text-xs text-gray-500 mb-1">Numéro de ticket</p>
+                     <p class="text-3xl font-bold text-gray-900 tracking-wider">
+@@ -201,10 +200,19 @@ const reimprimer = () => {
+                     </div>
+                 </div>
+ 
++                <!-- Patient (uniquement si renseigné) -->
++                <div v-if="ticket.patient_nom" class="py-4 border-t-2 border-dashed border-gray-300">
++                    <p class="text-xs text-gray-500 mb-2">PATIENT</p>
++                    <p class="text-base font-semibold text-gray-900">
++                        {{ ticket.patient_prenom }} {{ ticket.patient_nom }}
++                    </p>
++                </div>
++
+                 <!-- Prestation -->
+                 <div class="py-4 border-t-2 border-dashed border-gray-300">
+                     <p class="text-xs text-gray-500 mb-2">PRESTATION</p>
+                     <p class="text-lg font-semibold text-gray-900 mb-3">{{ ticket.ticket_type.libelle }}</p>
++
+                     <div class="bg-gray-50 rounded-lg p-3 flex justify-between items-center">
+                         <span class="text-sm text-gray-600">Montant payé</span>
+                         <span class="text-2xl font-bold text-emerald-600">
+diff --git a/resources/js/composables/useBluetoothPrinter.js b/resources/js/composables/useBluetoothPrinter.js
+deleted file mode 100644
+index e538855..0000000
+--- a/resources/js/composables/useBluetoothPrinter.js
++++ /dev/null
+@@ -1,217 +0,0 @@
+-/**
+- * useBluetoothPrinter.js
+- * Composable Vue — Impression Bluetooth ESC/POS
+- * Compatible GIGA360 80mm + tout thermal BT ESC/POS
+- *
+- * Emplacement : resources/js/composables/useBluetoothPrinter.js
+- */
+-
+-import { ref } from 'vue'
+-
+-// UUID ESC/POS standard (Serial Port Profile over BLE)
+-// Si GIGA360 ne répond pas, essayer avec acceptAllDevices: true en debug
+-const SERVICE_UUID        = '000018f0-0000-1000-8000-00805f9b34fb'
+-const CHARACTERISTIC_UUID = '00002af1-0000-1000-8000-00805f9b34fb'
+-
+-export function useBluetoothPrinter() {
+-    const connecte      = ref(false)
+-    const connexionEnCours = ref(false)
+-    const erreur        = ref(null)
+-
+-    let characteristic  = null
+-
+-    // ─── Détection PWA standalone ─────────────────────────────────────────
+-    const estPWA = () =>
+-        window.matchMedia('(display-mode: standalone)').matches ||
+-        window.navigator.standalone === true
+-
+-    // ─── Bluetooth disponible sur cet appareil ? ─────────────────────────
+-    const bluetoothDisponible = () =>
+-        typeof navigator !== 'undefined' &&
+-        typeof navigator.bluetooth !== 'undefined'
+-
+-    // ─── Connexion à l'imprimante ─────────────────────────────────────────
+-    const connecter = async () => {
+-        if (!bluetoothDisponible()) {
+-            erreur.value = 'Bluetooth non disponible sur cet appareil ou navigateur.'
+-            return false
+-        }
+-
+-        try {
+-            connexionEnCours.value = true
+-            erreur.value = null
+-
+-            const device = await navigator.bluetooth.requestDevice({
+-                // Chercher par nom d'abord ; si ça échoue, commenter et utiliser acceptAllDevices
+-                filters: [
+-                    { namePrefix: 'GIGA' },
+-                    { namePrefix: 'RPP' },      // variante courante imprimantes 80mm
+-                    { namePrefix: 'Printer' },
+-                    { namePrefix: 'MTP' },
+-                ],
+-                optionalServices: [SERVICE_UUID],
+-            })
+-
+-            const server  = await device.gatt.connect()
+-            const service = await server.getPrimaryService(SERVICE_UUID)
+-            characteristic = await service.getCharacteristic(CHARACTERISTIC_UUID)
+-
+-            connecte.value = true
+-
+-            // Gérer la déconnexion physique
+-            device.addEventListener('gattserverdisconnected', () => {
+-                connecte.value = false
+-                characteristic  = null
+-            })
+-
+-            return true
+-        } catch (e) {
+-            erreur.value = e.message || 'Erreur de connexion Bluetooth.'
+-            return false
+-        } finally {
+-            connexionEnCours.value = false
+-        }
+-    }
+-
+-    // ─── Écrire des octets (par chunks de 512 — limite BLE) ──────────────
+-    const ecrire = async (bytes) => {
+-        if (!characteristic) throw new Error('Imprimante non connectée.')
+-
+-        const CHUNK = 512
+-        for (let i = 0; i < bytes.length; i += CHUNK) {
+-            await characteristic.writeValue(bytes.slice(i, i + CHUNK))
+-            // Petit délai entre chunks pour les imprimantes lentes
+-            await new Promise(r => setTimeout(r, 30))
+-        }
+-    }
+-
+-    // ─── Encoder texte en CP1252 (Latin-1 approx. pour ESC/POS) ─────────
+-    const encoder = new TextEncoder() // UTF-8 par défaut
+-
+-    const encoderTexte = (texte) => encoder.encode(texte)
+-
+-    // ─── Commandes ESC/POS ────────────────────────────────────────────────
+-    const ESC = 0x1B
+-    const GS  = 0x1D
+-    const LF  = 0x0A
+-
+-    const CMD = {
+-        init:          new Uint8Array([ESC, 0x40]),           // Initialiser
+-        centrer:       new Uint8Array([ESC, 0x61, 0x01]),     // Alignement centre
+-        gauche:        new Uint8Array([ESC, 0x61, 0x00]),     // Alignement gauche
+-        gras_on:       new Uint8Array([ESC, 0x45, 0x01]),     // Gras actif
+-        gras_off:      new Uint8Array([ESC, 0x45, 0x00]),     // Gras inactif
+-        grand_on:      new Uint8Array([ESC, 0x21, 0x30]),     // Double hauteur+largeur
+-        grand_off:     new Uint8Array([ESC, 0x21, 0x00]),     // Taille normale
+-        couper:        new Uint8Array([GS,  0x56, 0x41, 0x10]), // Coupe partielle
+-        ligne:         encoderTexte('--------------------------------\n'),
+-        ligne_double:  encoderTexte('================================\n'),
+-        saut:          new Uint8Array([LF]),
+-    }
+-
+-    const concat = (...parts) => {
+-        const totalLength = parts.reduce((sum, p) => sum + p.length, 0)
+-        const result = new Uint8Array(totalLength)
+-        let offset = 0
+-        for (const p of parts) {
+-            result.set(p, offset)
+-            offset += p.length
+-        }
+-        return result
+-    }
+-
+-    // ─── Imprimer un ticket caissier ──────────────────────────────────────
+-    //
+-    // ticket = {
+-    //   numero: Number,
+-    //   date_emission: String,   // 'YYYY-MM-DD'
+-    //   emis_le: String,         // ISO datetime
+-    //   prix_paye: Number,
+-    //   ticket_type: { libelle: String },
+-    //   user: { name: String },
+-    //   tenant: { nom: String },  // optionnel
+-    // }
+-    const imprimerTicket = async (ticket) => {
+-        if (!connecte.value) {
+-            const ok = await connecter()
+-            if (!ok) return false
+-        }
+-
+-        const numero = String(ticket.numero).padStart(4, '0')
+-        const date   = new Date(ticket.date_emission).toLocaleDateString('fr-FR')
+-        const heure  = new Date(ticket.emis_le).toLocaleTimeString('fr-FR', {
+-            hour: '2-digit', minute: '2-digit',
+-        })
+-        const montant = new Intl.NumberFormat('fr-FR').format(ticket.prix_paye) + ' FCFA'
+-        const nomPoste = ticket.tenant?.nom || 'POSTE DE SANTE DE BOULAL'
+-
+-        try {
+-            const data = concat(
+-                CMD.init,
+-
+-                // En-tête
+-                CMD.centrer,
+-                CMD.gras_on,
+-                encoderTexte(nomPoste + '\n'),
+-                CMD.gras_off,
+-                encoderTexte('RECU DE PAIEMENT\n'),
+-                CMD.ligne_double,
+-
+-                // Numéro de ticket (grand)
+-                CMD.centrer,
+-                CMD.grand_on,
+-                encoderTexte(`N  ${numero}\n`),
+-                CMD.grand_off,
+-                CMD.saut,
+-
+-                // Détails
+-                CMD.gauche,
+-                CMD.ligne,
+-                encoderTexte(`Date    : ${date}\n`),
+-                encoderTexte(`Heure   : ${heure}\n`),
+-                encoderTexte(`Caissier: ${ticket.user.name}\n`),
+-                CMD.ligne,
+-
+-                // Prestation
+-                CMD.gras_on,
+-                encoderTexte(`${ticket.ticket_type.libelle}\n`),
+-                CMD.gras_off,
+-                CMD.ligne,
+-
+-                // Montant (grand)
+-                CMD.centrer,
+-                CMD.grand_on,
+-                CMD.gras_on,
+-                encoderTexte(`${montant}\n`),
+-                CMD.gras_off,
+-                CMD.grand_off,
+-
+-                // Pied
+-                CMD.ligne_double,
+-                CMD.centrer,
+-                encoderTexte('Merci - Bonne sante\n'),
+-                encoderTexte('Conservez ce recu\n'),
+-                new Uint8Array([LF, LF, LF]),
+-
+-                // Coupe
+-                CMD.couper,
+-            )
+-
+-            await ecrire(data)
+-            return true
+-        } catch (e) {
+-            erreur.value = e.message
+-            return false
+-        }
+-    }
+-
+-    return {
+-        connecte,
+-        connexionEnCours,
+-        erreur,
+-        estPWA,
+-        bluetoothDisponible,
+-        connecter,
+-        imprimerTicket,
+-    }
+-}
+diff --git a/resources/views/app.blade.php b/resources/views/app.blade.php
+index acab9a1..a82855e 100644
+--- a/resources/views/app.blade.php
++++ b/resources/views/app.blade.php
+@@ -7,6 +7,11 @@
+ 
+         <title inertia>{{ config('app.name', 'PS-Boulal') }}</title>
+ 
++        <!-- PWA -->
++        <link rel="manifest" href="/poste-sante-boulal/public/manifest.webmanifest">
++        <meta name="theme-color" content="#059669">
++        <meta name="mobile-web-app-capable" content="yes">
++
+         <!-- Fonts -->
+         <link rel="preconnect" href="https://fonts.bunny.net">
+         <link href="https://fonts.bunny.net/css?family=figtree:400,500,600&display=swap" rel="stylesheet" />
+diff --git a/routes/api.php b/routes/api.php
+index f1c1ca0..dcde1cd 100644
+--- a/routes/api.php
++++ b/routes/api.php
+@@ -1,21 +1,19 @@
+ <?php
+ 
+-use App\Http\Controllers\Api\AuthController;
+-use App\Http\Controllers\TicketController;
+ use Illuminate\Support\Facades\Route;
+ 
+ /*
+ |--------------------------------------------------------------------------
+ | API Routes
+ |--------------------------------------------------------------------------
++|
++| Aucune route API pour le moment.
++| L'impression Bluetooth mobile passe par le pont JavaScript
++| window.AndroidPrinter injecte par l'app Flutter WebView
++| (voir resources/js/Pages/Tickets/Recu.vue).
++|
++| NOTE : ce fichier n'est pas charge par bootstrap/app.php.
++| Si des routes API deviennent necessaires, ajouter
++| api: __DIR__.'/../routes/api.php' dans withRouting().
++|
+ */
+-
+-Route::post('/login', [AuthController::class, 'login']);
+-
+-Route::middleware('auth:sanctum')->group(function () {
+-    Route::post('/logout', [AuthController::class, 'logout']);
+-    Route::get('/user', [AuthController::class, 'user']);
+-
+-    // Tickets
+-    Route::post('/tickets/{id}/print-bluetooth', [TicketController::class, 'printBluetooth']);
+-});

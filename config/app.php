@@ -117,14 +117,6 @@ return [
     | Supported drivers: "file", "cache"
     |
     */
-        /*
-    |--------------------------------------------------------------------------
-    | Flutter Bridge Configuration
-    |--------------------------------------------------------------------------
-    */
-    'flutter_bridge_ip' => env('FLUTTER_BRIDGE_IP', '192.168.0.100'),
-    'flutter_bridge_port' => env('FLUTTER_BRIDGE_PORT', 8080),
-
     'maintenance' => [
         'driver' => env('APP_MAINTENANCE_DRIVER', 'file'),
         'store' => env('APP_MAINTENANCE_STORE', 'database'),
