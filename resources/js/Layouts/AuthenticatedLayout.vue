@@ -37,6 +37,7 @@ const medicamentsLinks = computed(() => {
     if (user.value.role !== 'admin') return [];
     return [
         { name: "Catalogue", route: "medicaments.index", icon: "M", description: "Ajouter et configurer les médicaments" },
+        { name: "Stats des ventes", route: "medicaments.stats", icon: "V", description: "Ventes par médicament et période" },
         { name: "Stock pharmacie", route: "stocks.index", icon: "S", description: "Inventaire et mouvements" },
         { name: "Historique pharmacie", route: "pharmacy.historique", icon: "H", description: "Ventes pharmacie réalisées" },
     ];
@@ -45,6 +46,7 @@ const medicamentsLinks = computed(() => {
 const moreLinks = computed(() => {
     const links = [
         { name: "Rapports", route: "rapports.index", icon: "R", roles: ["admin", "superviseur"] },
+        { name: "Stats ventes méd.", route: "medicaments.stats", icon: "V", roles: ["pharmacien", "superviseur"] },
         { name: "Stock", route: "stocks.index", icon: "S", roles: ["pharmacien", "superviseur"] },
         { name: "Agents", route: "agents.index", icon: "A", roles: ["admin"] },
         { name: "Types de tickets", route: "ticket-types.index", icon: "T", roles: ["admin"] },

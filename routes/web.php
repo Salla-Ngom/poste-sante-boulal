@@ -42,6 +42,7 @@ Route::get('/stocks/mouvements', [\App\Http\Controllers\StockController::class, 
 
     // Gestion des médicaments (admin uniquement)
 Route::get('/medicaments', [\App\Http\Controllers\MedicamentController::class, 'index'])->name('medicaments.index');
+Route::get('/medicaments/stats', [\App\Http\Controllers\MedicamentStatsController::class, 'index'])->name('medicaments.stats');
 Route::get('/medicaments/nouveau', [\App\Http\Controllers\MedicamentController::class, 'create'])->name('medicaments.create');
 Route::post('/medicaments', [\App\Http\Controllers\MedicamentController::class, 'store'])->name('medicaments.store');
 Route::get('/medicaments/{id}/modifier', [\App\Http\Controllers\MedicamentController::class, 'edit'])->name('medicaments.edit');
