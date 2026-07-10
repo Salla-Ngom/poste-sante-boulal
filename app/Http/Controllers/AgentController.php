@@ -13,15 +13,7 @@ use Inertia\Inertia;
 
 class AgentController extends Controller
 {
-    /**
-     * Vérifie que l'utilisateur est admin
-     */
-    private function ensureAdmin()
-    {
-        if (auth()->user()->role !== 'admin') {
-            abort(403, 'Accès réservé aux administrateurs.');
-        }
-    }
+    use \App\Http\Controllers\Concerns\AuthorizesActions;
 
     /**
      * Liste des agents avec statistiques
@@ -34,6 +26,10 @@ class AgentController extends Controller
         $tenantId = $user->tenant_id;
 
         $agents = User::where('tenant_id', $tenantId)
+            // Les comptes superadmin sont invisibles pour les autres rôles
+            ->when($user->role !== 'superadmin', function ($q) {
+                $q->where('role', '!=', 'superadmin');
+            })
             ->withCount(['tickets as total_ventes' => function ($q) {
                 $q->where('statut', 'actif');
             }])
@@ -133,6 +129,10 @@ class AgentController extends Controller
             ->where('tenant_id', $admin->tenant_id)
             ->firstOrFail();
 
+        if ($agent->role === 'superadmin') {
+            abort(403, 'Compte superadmin : modifiable uniquement en ligne de commande.');
+        }
+
         return Inertia::render('Agents/Form', [
             'agent' => $agent,
         ]);
@@ -150,6 +150,10 @@ class AgentController extends Controller
         $agent = User::where('id', $id)
             ->where('tenant_id', $admin->tenant_id)
             ->firstOrFail();
+
+        if ($agent->role === 'superadmin') {
+            abort(403, 'Compte superadmin : modifiable uniquement en ligne de commande.');
+        }
 
         $validated = $request->validate([
             'name' => 'required|string|max:100',
@@ -220,7 +224,7 @@ class AgentController extends Controller
      */
     public function resetPassword(Request $request, $id)
     {
-        $this->ensureAdmin();
+        $this->ensureSuperadmin();
 
         $admin = auth()->user();
 
@@ -263,7 +267,7 @@ class AgentController extends Controller
      */
     public function toggleActif(Request $request, $id)
     {
-        $this->ensureAdmin();
+        $this->ensureSuperadmin();
 
         $admin = auth()->user();
 

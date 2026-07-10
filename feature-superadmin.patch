@@ -1,0 +1,433 @@
+diff --git a/app/Console/Commands/CreateSuperadmin.php b/app/Console/Commands/CreateSuperadmin.php
+new file mode 100644
+index 0000000..544b5bc
+--- /dev/null
++++ b/app/Console/Commands/CreateSuperadmin.php
+@@ -0,0 +1,117 @@
++<?php
++
++namespace App\Console\Commands;
++
++use App\Models\AuditLog;
++use App\Models\User;
++use Illuminate\Console\Command;
++use Illuminate\Support\Carbon;
++
++class CreateSuperadmin extends Command
++{
++    /**
++     * Usage : php artisan superadmin:create
++     *
++     * Crée un compte superadmin, ou promeut un compte existant.
++     * Le rôle superadmin ne peut PAS être attribué depuis l'interface web :
++     * cette commande est le seul moyen d'en créer un.
++     */
++    protected $signature = 'superadmin:create';
++
++    protected $description = 'Créer ou promouvoir un compte superadmin (désactivation agents + reset mots de passe)';
++
++    public function handle(): int
++    {
++        $this->info('=== Création d\'un compte SUPERADMIN ===');
++        $this->newLine();
++
++        $email = $this->ask('Email du compte');
++
++        $existant = User::where('email', $email)->first();
++
++        // ─── Cas 1 : le compte existe → promotion ─────────────────────
++        if ($existant) {
++            if ($existant->role === 'superadmin') {
++                $this->warn("Ce compte est déjà superadmin. Rien à faire.");
++                return self::SUCCESS;
++            }
++
++            $this->line("Compte trouvé : {$existant->name} (rôle actuel : {$existant->role})");
++
++            if (!$this->confirm('Promouvoir ce compte en superadmin ?', true)) {
++                $this->warn('Opération annulée.');
++                return self::SUCCESS;
++            }
++
++            $ancienRole = $existant->role;
++            $existant->update(['role' => 'superadmin', 'actif' => true]);
++
++            AuditLog::create([
++                'tenant_id' => $existant->tenant_id,
++                'user_id' => $existant->id,
++                'action' => 'user.promoted_superadmin',
++                'entite' => 'user',
++                'entite_id' => $existant->id,
++                'details' => [
++                    'email' => $existant->email,
++                    'ancien_role' => $ancienRole,
++                    'via' => 'artisan superadmin:create',
++                ],
++                'ip' => 'console',
++                'survenu_le' => Carbon::now(),
++            ]);
++
++            $this->info("✔ {$existant->name} est maintenant SUPERADMIN.");
++            return self::SUCCESS;
++        }
++
++        // ─── Cas 2 : création d'un nouveau compte ─────────────────────
++        $name = $this->ask('Nom complet');
++        $password = $this->secret('Mot de passe (8 caractères minimum)');
++        $confirmation = $this->secret('Confirmer le mot de passe');
++
++        if (strlen($password) < 8) {
++            $this->error('Le mot de passe doit contenir au moins 8 caractères.');
++            return self::FAILURE;
++        }
++        if ($password !== $confirmation) {
++            $this->error('Les mots de passe ne correspondent pas.');
++            return self::FAILURE;
++        }
++
++        // Rattacher au tenant existant (application mono-poste)
++        $tenantId = \DB::table('tenants')->value('id');
++        if (!$tenantId) {
++            $this->error('Aucun tenant en base. Créez d\'abord le tenant du poste.');
++            return self::FAILURE;
++        }
++
++        $superadmin = User::create([
++            'tenant_id' => $tenantId,
++            'name' => $name,
++            'email' => $email,
++            'password' => $password, // hashé automatiquement par le cast du modèle
++            'role' => 'superadmin',
++            'actif' => true,
++            'email_verified_at' => Carbon::now(),
++        ]);
++
++        AuditLog::create([
++            'tenant_id' => $tenantId,
++            'user_id' => $superadmin->id,
++            'action' => 'user.created_superadmin',
++            'entite' => 'user',
++            'entite_id' => $superadmin->id,
++            'details' => [
++                'name' => $name,
++                'email' => $email,
++                'via' => 'artisan superadmin:create',
++            ],
++            'ip' => 'console',
++            'survenu_le' => Carbon::now(),
++        ]);
++
++        $this->info("✔ Superadmin créé : {$name} <{$email}>");
++        return self::SUCCESS;
++    }
++}
+diff --git a/app/Http/Controllers/AgentController.php b/app/Http/Controllers/AgentController.php
+index 0645b22..71916ee 100644
+--- a/app/Http/Controllers/AgentController.php
++++ b/app/Http/Controllers/AgentController.php
+@@ -13,15 +13,7 @@
+ 
+ class AgentController extends Controller
+ {
+-    /**
+-     * Vérifie que l'utilisateur est admin
+-     */
+-    private function ensureAdmin()
+-    {
+-        if (auth()->user()->role !== 'admin') {
+-            abort(403, 'Accès réservé aux administrateurs.');
+-        }
+-    }
++    use \App\Http\Controllers\Concerns\AuthorizesActions;
+ 
+     /**
+      * Liste des agents avec statistiques
+@@ -34,6 +26,10 @@ public function index()
+         $tenantId = $user->tenant_id;
+ 
+         $agents = User::where('tenant_id', $tenantId)
++            // Les comptes superadmin sont invisibles pour les autres rôles
++            ->when($user->role !== 'superadmin', function ($q) {
++                $q->where('role', '!=', 'superadmin');
++            })
+             ->withCount(['tickets as total_ventes' => function ($q) {
+                 $q->where('statut', 'actif');
+             }])
+@@ -133,6 +129,10 @@ public function edit($id)
+             ->where('tenant_id', $admin->tenant_id)
+             ->firstOrFail();
+ 
++        if ($agent->role === 'superadmin') {
++            abort(403, 'Compte superadmin : modifiable uniquement en ligne de commande.');
++        }
++
+         return Inertia::render('Agents/Form', [
+             'agent' => $agent,
+         ]);
+@@ -151,6 +151,10 @@ public function update(Request $request, $id)
+             ->where('tenant_id', $admin->tenant_id)
+             ->firstOrFail();
+ 
++        if ($agent->role === 'superadmin') {
++            abort(403, 'Compte superadmin : modifiable uniquement en ligne de commande.');
++        }
++
+         $validated = $request->validate([
+             'name' => 'required|string|max:100',
+             'email' => ['required', 'email', 'max:255', Rule::unique('users')->ignore($agent->id)],
+@@ -220,7 +224,7 @@ public function update(Request $request, $id)
+      */
+     public function resetPassword(Request $request, $id)
+     {
+-        $this->ensureAdmin();
++        $this->ensureSuperadmin();
+ 
+         $admin = auth()->user();
+ 
+@@ -263,7 +267,7 @@ public function resetPassword(Request $request, $id)
+      */
+     public function toggleActif(Request $request, $id)
+     {
+-        $this->ensureAdmin();
++        $this->ensureSuperadmin();
+ 
+         $admin = auth()->user();
+ 
+diff --git a/app/Http/Controllers/Concerns/AuthorizesActions.php b/app/Http/Controllers/Concerns/AuthorizesActions.php
+index 5332b37..574d9d9 100644
+--- a/app/Http/Controllers/Concerns/AuthorizesActions.php
++++ b/app/Http/Controllers/Concerns/AuthorizesActions.php
+@@ -16,33 +16,31 @@ protected function ensureCanOperate()
+             abort(403, 'Le superviseur ne peut pas effectuer cette opération. Accès en lecture seule uniquement.');
+         }
+ 
+-        if (!in_array($role, ['caissier', 'pharmacien', 'admin'])) {
++        if (!in_array($role, ['caissier', 'pharmacien', 'admin', 'superadmin'])) {
+             abort(403, 'Accès refusé.');
+         }
+     }
+ 
+     /**
+      * Vérifie que l'utilisateur peut opérer la caisse Accueil (vente de tickets).
+-     * Seuls le caissier et l'admin sont autorisés.
+      */
+     protected function ensureCanOperateAccueil()
+     {
+         $role = auth()->user()->role;
+ 
+-        if (!in_array($role, ['caissier', 'admin'])) {
++        if (!in_array($role, ['caissier', 'admin', 'superadmin'])) {
+             abort(403, 'Cette action est réservée au caissier d\'accueil et à l\'administrateur.');
+         }
+     }
+ 
+     /**
+      * Vérifie que l'utilisateur peut opérer la caisse Pharmacie (vente de médicaments).
+-     * Seuls le pharmacien et l'admin sont autorisés.
+      */
+     protected function ensureCanOperatePharmacie()
+     {
+         $role = auth()->user()->role;
+ 
+-        if (!in_array($role, ['pharmacien', 'admin'])) {
++        if (!in_array($role, ['pharmacien', 'admin', 'superadmin'])) {
+             abort(403, 'Cette action est réservée au pharmacien et à l\'administrateur.');
+         }
+     }
+@@ -54,51 +52,63 @@ protected function ensureCanRead()
+     {
+         $role = auth()->user()->role;
+ 
+-        if (!in_array($role, ['caissier', 'superviseur', 'pharmacien', 'admin'])) {
++        if (!in_array($role, ['caissier', 'superviseur', 'pharmacien', 'admin', 'superadmin'])) {
+             abort(403, 'Accès refusé.');
+         }
+     }
+ 
+     /**
+-     * Vérifie que l'utilisateur peut consulter les rapports (superviseur ou admin).
++     * Vérifie que l'utilisateur peut consulter les rapports.
+      */
+     protected function ensureCanReadReports()
+     {
+-        if (!in_array(auth()->user()->role, ['superviseur', 'admin'])) {
++        if (!in_array(auth()->user()->role, ['superviseur', 'admin', 'superadmin'])) {
+             abort(403, 'Accès réservé au superviseur et à l\'administrateur.');
+         }
+     }
+ 
+     /**
+-     * Vérifie que l'utilisateur est admin.
++     * Vérifie que l'utilisateur est admin (le superadmin hérite de tous les droits admin).
+      */
+     protected function ensureAdmin()
+     {
+-        if (auth()->user()->role !== 'admin') {
++        if (!in_array(auth()->user()->role, ['admin', 'superadmin'])) {
+             abort(403, 'Accès réservé aux administrateurs.');
+         }
+     }
++
++    /**
++     * Vérifie que l'utilisateur est SUPERADMIN.
++     * Réservé aux actions sensibles : désactivation d'agents,
++     * réinitialisation de mots de passe.
++     */
++    protected function ensureSuperadmin()
++    {
++        if (auth()->user()->role !== 'superadmin') {
++            abort(403, 'Cette action est réservée au superadmin.');
++        }
++    }
++
+     protected function ensureCanReadStock()
+-{
+-    $role = auth()->user()->role;
++    {
++        $role = auth()->user()->role;
+ 
+-    if (!in_array($role, ['pharmacien', 'superviseur', 'admin'])) {
+-        abort(403, 'Accès refusé au stock pharmacie.');
++        if (!in_array($role, ['pharmacien', 'superviseur', 'admin', 'superadmin'])) {
++            abort(403, 'Accès refusé au stock pharmacie.');
++        }
+     }
+-}
+ 
+-protected function ensureCanReceiveStock()
++    protected function ensureCanReceiveStock()
+     {
+-        if (!in_array(auth()->user()->role, ['pharmacien', 'admin'])) {
++        if (!in_array(auth()->user()->role, ['pharmacien', 'admin', 'superadmin'])) {
+             abort(403, 'Cette action est réservée au pharmacien et à l\'administrateur.');
+         }
+     }
+ 
+     protected function ensureCanRegularizeStock()
+     {
+-        if (auth()->user()->role !== 'admin') {
++        if (!in_array(auth()->user()->role, ['admin', 'superadmin'])) {
+             abort(403, 'La régularisation du stock est réservée à l\'administrateur.');
+         }
+     }
+-
+ }
+diff --git a/database/migrations/2026_07_10_120000_add_superadmin_to_users_role.php b/database/migrations/2026_07_10_120000_add_superadmin_to_users_role.php
+new file mode 100644
+index 0000000..b557111
+--- /dev/null
++++ b/database/migrations/2026_07_10_120000_add_superadmin_to_users_role.php
+@@ -0,0 +1,23 @@
++<?php
++
++use Illuminate\Database\Migrations\Migration;
++use Illuminate\Support\Facades\DB;
++
++return new class extends Migration
++{
++    /**
++     * Ajoute le rôle 'superadmin' à l'enum users.role.
++     * Seul un superadmin peut désactiver un agent ou réinitialiser un mot de passe.
++     */
++    public function up(): void
++    {
++        DB::statement("ALTER TABLE users MODIFY COLUMN role ENUM('superadmin','admin','superviseur','caissier','pharmacien') NOT NULL DEFAULT 'caissier'");
++    }
++
++    public function down(): void
++    {
++        // Rétrograder les superadmins en admin avant de retirer la valeur de l'enum
++        DB::table('users')->where('role', 'superadmin')->update(['role' => 'admin']);
++        DB::statement("ALTER TABLE users MODIFY COLUMN role ENUM('admin','superviseur','caissier','pharmacien') NOT NULL DEFAULT 'caissier'");
++    }
++};
+diff --git a/resources/js/Layouts/AuthenticatedLayout.vue b/resources/js/Layouts/AuthenticatedLayout.vue
+index ef104fd..ff93530 100644
+--- a/resources/js/Layouts/AuthenticatedLayout.vue
++++ b/resources/js/Layouts/AuthenticatedLayout.vue
+@@ -14,6 +14,7 @@ const user = computed(() => page.props.auth.user);
+ 
+ const roleBadge = computed(() => {
+     const badges = {
++        superadmin: { label: "Superadmin", bg: "bg-gray-900", text: "text-white" },
+         admin: { label: "Administrateur", bg: "bg-pink-100", text: "text-pink-700" },
+         superviseur: { label: "Superviseur", bg: "bg-blue-100", text: "text-blue-700" },
+         pharmacien: { label: "Pharmacien", bg: "bg-purple-100", text: "text-purple-700" },
+@@ -24,9 +25,9 @@ const roleBadge = computed(() => {
+ 
+ const navLinks = computed(() => {
+     const links = [
+-        { name: "Dashboard", route: "dashboard", icon: "D", roles: ["admin", "superviseur", "caissier", "pharmacien"] },
++        { name: "Dashboard", route: "dashboard", icon: "D", roles: ["superadmin", "admin", "superviseur", "caissier", "pharmacien"] },
+         { name: "Vendre", route: "tickets.vendre", icon: "+", roles: ["caissier"] },
+-        { name: "Historique", route: "tickets.index", icon: "H", roles: ["admin", "superviseur", "caissier"] },
++        { name: "Historique", route: "tickets.index", icon: "H", roles: ["superadmin", "admin", "superviseur", "caissier"] },
+         { name: "Vendre méd.", route: "pharmacy.vendre", icon: "V", roles: ["pharmacien"] },
+         { name: "Histo. pharmacie", route: "pharmacy.historique", icon: "P", roles: ["superviseur", "pharmacien"] },
+     ];
+@@ -34,7 +35,7 @@ const navLinks = computed(() => {
+ });
+ 
+ const medicamentsLinks = computed(() => {
+-    if (user.value.role !== 'admin') return [];
++    if (!['admin', 'superadmin'].includes(user.value.role)) return [];
+     return [
+         { name: "Catalogue", route: "medicaments.index", icon: "M", description: "Ajouter et configurer les médicaments" },
+         { name: "Stats des ventes", route: "medicaments.stats", icon: "V", description: "Ventes par médicament et période" },
+@@ -45,11 +46,11 @@ const medicamentsLinks = computed(() => {
+ 
+ const moreLinks = computed(() => {
+     const links = [
+-        { name: "Rapports", route: "rapports.index", icon: "R", roles: ["admin", "superviseur"] },
++        { name: "Rapports", route: "rapports.index", icon: "R", roles: ["superadmin", "admin", "superviseur"] },
+         { name: "Stats ventes méd.", route: "medicaments.stats", icon: "V", roles: ["pharmacien", "superviseur"] },
+         { name: "Stock", route: "stocks.index", icon: "S", roles: ["pharmacien", "superviseur"] },
+-        { name: "Agents", route: "agents.index", icon: "A", roles: ["admin"] },
+-        { name: "Types de tickets", route: "ticket-types.index", icon: "T", roles: ["admin"] },
++        { name: "Agents", route: "agents.index", icon: "A", roles: ["superadmin", "admin"] },
++        { name: "Types de tickets", route: "ticket-types.index", icon: "T", roles: ["superadmin", "admin"] },
+     ];
+     return links.filter((link) => link.roles.includes(user.value.role));
+ });
+diff --git a/resources/js/Pages/Agents/Index.vue b/resources/js/Pages/Agents/Index.vue
+index 4c6a424..550c677 100644
+--- a/resources/js/Pages/Agents/Index.vue
++++ b/resources/js/Pages/Agents/Index.vue
+@@ -58,8 +58,10 @@ const confirmerReset = () => {
+ // Couleur du badge selon le rôle
+ const roleBadge = (role) => {
+     const badges = {
++        superadmin: 'bg-gray-900 text-white',
+         admin: 'bg-pink-100 text-pink-700',
+         superviseur: 'bg-blue-100 text-blue-700',
++        pharmacien: 'bg-purple-100 text-purple-700',
+         caissier: 'bg-emerald-100 text-emerald-700',
+     };
+     return badges[role] || badges.caissier;
+@@ -67,8 +69,10 @@ const roleBadge = (role) => {
+ 
+ const roleLibelle = (role) => {
+     const libelles = {
++        superadmin: 'Superadmin',
+         admin: 'Administrateur',
+         superviseur: 'Superviseur',
++        pharmacien: 'Pharmacien',
+         caissier: 'Caissier',
+     };
+     return libelles[role] || role;
+@@ -162,13 +166,14 @@ const roleLibelle = (role) => {
+                                                 Modifier
+                                             </Link>
+                                             <button
++                                                v-if="userActuel.role === 'superadmin'"
+                                                 @click="ouvrirReset(agent)"
+                                                 class="text-blue-600 hover:text-blue-700 text-sm font-medium"
+                                             >
+                                                 Mot de passe
+                                             </button>
+                                             <button
+-                                                v-if="agent.id !== userActuel.id"
++                                                v-if="userActuel.role === 'superadmin' && agent.id !== userActuel.id"
+                                                 @click="ouvrirToggle(agent)"
+                                                 class="text-sm font-medium"
+                                                 :class="agent.actif ? 'text-red-600 hover:text-red-700' : 'text-blue-600 hover:text-blue-700'"

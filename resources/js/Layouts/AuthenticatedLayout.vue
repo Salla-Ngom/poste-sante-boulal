@@ -14,6 +14,7 @@ const user = computed(() => page.props.auth.user);
 
 const roleBadge = computed(() => {
     const badges = {
+        superadmin: { label: "Superadmin", bg: "bg-gray-900", text: "text-white" },
         admin: { label: "Administrateur", bg: "bg-pink-100", text: "text-pink-700" },
         superviseur: { label: "Superviseur", bg: "bg-blue-100", text: "text-blue-700" },
         pharmacien: { label: "Pharmacien", bg: "bg-purple-100", text: "text-purple-700" },
@@ -24,9 +25,9 @@ const roleBadge = computed(() => {
 
 const navLinks = computed(() => {
     const links = [
-        { name: "Dashboard", route: "dashboard", icon: "D", roles: ["admin", "superviseur", "caissier", "pharmacien"] },
+        { name: "Dashboard", route: "dashboard", icon: "D", roles: ["superadmin", "admin", "superviseur", "caissier", "pharmacien"] },
         { name: "Vendre", route: "tickets.vendre", icon: "+", roles: ["caissier"] },
-        { name: "Historique", route: "tickets.index", icon: "H", roles: ["admin", "superviseur", "caissier"] },
+        { name: "Historique", route: "tickets.index", icon: "H", roles: ["superadmin", "admin", "superviseur", "caissier"] },
         { name: "Vendre méd.", route: "pharmacy.vendre", icon: "V", roles: ["pharmacien"] },
         { name: "Histo. pharmacie", route: "pharmacy.historique", icon: "P", roles: ["superviseur", "pharmacien"] },
     ];
@@ -34,7 +35,7 @@ const navLinks = computed(() => {
 });
 
 const medicamentsLinks = computed(() => {
-    if (user.value.role !== 'admin') return [];
+    if (!['admin', 'superadmin'].includes(user.value.role)) return [];
     return [
         { name: "Catalogue", route: "medicaments.index", icon: "M", description: "Ajouter et configurer les médicaments" },
         { name: "Stats des ventes", route: "medicaments.stats", icon: "V", description: "Ventes par médicament et période" },
@@ -45,11 +46,11 @@ const medicamentsLinks = computed(() => {
 
 const moreLinks = computed(() => {
     const links = [
-        { name: "Rapports", route: "rapports.index", icon: "R", roles: ["admin", "superviseur"] },
+        { name: "Rapports", route: "rapports.index", icon: "R", roles: ["superadmin", "admin", "superviseur"] },
         { name: "Stats ventes méd.", route: "medicaments.stats", icon: "V", roles: ["pharmacien", "superviseur"] },
         { name: "Stock", route: "stocks.index", icon: "S", roles: ["pharmacien", "superviseur"] },
-        { name: "Agents", route: "agents.index", icon: "A", roles: ["admin"] },
-        { name: "Types de tickets", route: "ticket-types.index", icon: "T", roles: ["admin"] },
+        { name: "Agents", route: "agents.index", icon: "A", roles: ["superadmin", "admin"] },
+        { name: "Types de tickets", route: "ticket-types.index", icon: "T", roles: ["superadmin", "admin"] },
     ];
     return links.filter((link) => link.roles.includes(user.value.role));
 });

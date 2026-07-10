@@ -58,8 +58,10 @@ const confirmerReset = () => {
 // Couleur du badge selon le rôle
 const roleBadge = (role) => {
     const badges = {
+        superadmin: 'bg-gray-900 text-white',
         admin: 'bg-pink-100 text-pink-700',
         superviseur: 'bg-blue-100 text-blue-700',
+        pharmacien: 'bg-purple-100 text-purple-700',
         caissier: 'bg-emerald-100 text-emerald-700',
     };
     return badges[role] || badges.caissier;
@@ -67,8 +69,10 @@ const roleBadge = (role) => {
 
 const roleLibelle = (role) => {
     const libelles = {
+        superadmin: 'Superadmin',
         admin: 'Administrateur',
         superviseur: 'Superviseur',
+        pharmacien: 'Pharmacien',
         caissier: 'Caissier',
     };
     return libelles[role] || role;
@@ -162,13 +166,14 @@ const roleLibelle = (role) => {
                                                 Modifier
                                             </Link>
                                             <button
+                                                v-if="userActuel.role === 'superadmin'"
                                                 @click="ouvrirReset(agent)"
                                                 class="text-blue-600 hover:text-blue-700 text-sm font-medium"
                                             >
                                                 Mot de passe
                                             </button>
                                             <button
-                                                v-if="agent.id !== userActuel.id"
+                                                v-if="userActuel.role === 'superadmin' && agent.id !== userActuel.id"
                                                 @click="ouvrirToggle(agent)"
                                                 class="text-sm font-medium"
                                                 :class="agent.actif ? 'text-red-600 hover:text-red-700' : 'text-blue-600 hover:text-blue-700'"
