@@ -1,0 +1,107 @@
+diff --git a/app/Http/Controllers/PharmacyTicketController.php b/app/Http/Controllers/PharmacyTicketController.php
+index 1bf884f..8127de8 100644
+--- a/app/Http/Controllers/PharmacyTicketController.php
++++ b/app/Http/Controllers/PharmacyTicketController.php
+@@ -262,9 +262,19 @@ public function index(Request $request)
+             });
+         }
+ 
++        // Filtre par type de vente : toutes / especes / cmu
++        if ($request->input('type') === 'cmu') {
++            $query->where('est_cmu', true);
++        } elseif ($request->input('type') === 'especes') {
++            $query->where('est_cmu', false);
++        }
++
+         $statsQuery = clone $query;
+         $totalTickets = (clone $statsQuery)->count();
+         $totalRecettes = (float) (clone $statsQuery)->sum('total');
++        $totalCmu = (float) (clone $statsQuery)->where('est_cmu', true)->sum('total');
++        $nombreCmu = (clone $statsQuery)->where('est_cmu', true)->count();
++        $totalEncaisse = $totalRecettes - $totalCmu;
+ 
+         $tickets = $query->orderBy('emis_le', 'desc')
+             ->paginate(20)
+@@ -275,11 +285,15 @@ public function index(Request $request)
+             'stats' => [
+                 'totalTickets' => $totalTickets,
+                 'totalRecettes' => $totalRecettes,
++                'totalCmu' => $totalCmu,
++                'nombreCmu' => $nombreCmu,
++                'totalEncaisse' => $totalEncaisse,
+             ],
+             'filtres' => [
+                 'debut' => $dateDebut->format('Y-m-d'),
+                 'fin' => $dateFin->format('Y-m-d'),
+                 'recherche' => $request->input('recherche', ''),
++                'type' => $request->input('type', ''),
+             ],
+         ]);
+     }
+diff --git a/resources/js/Pages/Pharmacy/Historique.vue b/resources/js/Pages/Pharmacy/Historique.vue
+index a8d6a3f..a7e5179 100644
+--- a/resources/js/Pages/Pharmacy/Historique.vue
++++ b/resources/js/Pages/Pharmacy/Historique.vue
+@@ -16,6 +16,7 @@ const form = useForm({
+     debut: props.filtres.debut,
+     fin: props.filtres.fin,
+     recherche: props.filtres.recherche,
++    type: props.filtres.type || '',
+ });
+ 
+ const filtrer = () => {
+@@ -60,17 +61,42 @@ const numeroFormate = (numero) => {
+             <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-6">
+ 
+                 <!-- ===== Stats ===== -->
+-                <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
++                <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                     <div class="bg-white rounded-xl border border-gray-100 shadow-sm p-5">
+                         <p class="text-xs text-gray-500 mb-1">Tickets pharmacie</p>
+                         <p class="text-3xl font-bold text-gray-900">{{ stats.totalTickets }}</p>
+                         <p class="text-xs text-gray-400 mt-1">ventes émises</p>
+                     </div>
+                     <div class="bg-white rounded-xl border border-gray-100 shadow-sm p-5">
+-                        <p class="text-xs text-gray-500 mb-1">Recettes pharmacie</p>
++                        <p class="text-xs text-gray-500 mb-1">Valeur totale</p>
+                         <p class="text-3xl font-bold text-purple-600">{{ formatFCFA(stats.totalRecettes) }}</p>
+                         <p class="text-xs text-gray-400 mt-1">période filtrée</p>
+                     </div>
++                    <div class="bg-white rounded-xl border border-gray-100 shadow-sm p-5">
++                        <p class="text-xs text-gray-500 mb-1">Encaissé (espèces)</p>
++                        <p class="text-3xl font-bold text-emerald-600">{{ formatFCFA(stats.totalEncaisse) }}</p>
++                        <p class="text-xs text-gray-400 mt-1">entré en caisse</p>
++                    </div>
++                    <div class="bg-white rounded-xl border border-gray-100 shadow-sm p-5">
++                        <p class="text-xs text-gray-500 mb-1">Prises en charge CMU</p>
++                        <p class="text-3xl font-bold text-blue-600">{{ formatFCFA(stats.totalCmu) }}</p>
++                        <p class="text-xs text-gray-400 mt-1">{{ stats.nombreCmu }} vente(s) gratuite(s)</p>
++                    </div>
++                </div>
++
++                <!-- ===== Filtre type de vente ===== -->
++                <div class="flex gap-2">
++                    <button
++                        v-for="opt in [{ v: '', l: 'Toutes' }, { v: 'especes', l: 'Espèces' }, { v: 'cmu', l: 'CMU' }]"
++                        :key="opt.v"
++                        @click="form.type = opt.v; filtrer()"
++                        class="px-4 py-2 rounded-lg text-sm font-medium border transition"
++                        :class="form.type === opt.v
++                            ? 'bg-purple-600 text-white border-purple-600'
++                            : 'bg-white text-gray-700 border-gray-200 hover:bg-gray-50'"
++                    >
++                        {{ opt.l }}
++                    </button>
+                 </div>
+ 
+                 <!-- ===== Filtres ===== -->
+@@ -128,7 +154,8 @@ const numeroFormate = (numero) => {
+                                         {{ ticket.user.name }}
+                                     </td>
+                                     <td class="px-4 py-3 text-right">
+-                                        <span class="font-semibold text-purple-600">{{ formatFCFA(ticket.total) }}</span>
++                                        <span class="font-semibold" :class="ticket.est_cmu ? 'text-blue-600' : 'text-purple-600'">{{ formatFCFA(ticket.total) }}</span>
++                                        <span v-if="ticket.est_cmu" class="ml-2 inline-block px-2 py-0.5 rounded-full text-xs font-semibold bg-blue-100 text-blue-700">CMU</span>
+                                     </td>
+                                     <td class="px-4 py-3 text-right">
+                                         <Link :href="route('pharmacy.recu', ticket.id)" class="text-purple-600 hover:text-purple-700 text-sm font-medium">

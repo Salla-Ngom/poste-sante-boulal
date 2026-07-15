@@ -262,9 +262,19 @@ class PharmacyTicketController extends Controller
             });
         }
 
+        // Filtre par type de vente : toutes / especes / cmu
+        if ($request->input('type') === 'cmu') {
+            $query->where('est_cmu', true);
+        } elseif ($request->input('type') === 'especes') {
+            $query->where('est_cmu', false);
+        }
+
         $statsQuery = clone $query;
         $totalTickets = (clone $statsQuery)->count();
         $totalRecettes = (float) (clone $statsQuery)->sum('total');
+        $totalCmu = (float) (clone $statsQuery)->where('est_cmu', true)->sum('total');
+        $nombreCmu = (clone $statsQuery)->where('est_cmu', true)->count();
+        $totalEncaisse = $totalRecettes - $totalCmu;
 
         $tickets = $query->orderBy('emis_le', 'desc')
             ->paginate(20)
@@ -275,11 +285,15 @@ class PharmacyTicketController extends Controller
             'stats' => [
                 'totalTickets' => $totalTickets,
                 'totalRecettes' => $totalRecettes,
+                'totalCmu' => $totalCmu,
+                'nombreCmu' => $nombreCmu,
+                'totalEncaisse' => $totalEncaisse,
             ],
             'filtres' => [
                 'debut' => $dateDebut->format('Y-m-d'),
                 'fin' => $dateFin->format('Y-m-d'),
                 'recherche' => $request->input('recherche', ''),
+                'type' => $request->input('type', ''),
             ],
         ]);
     }
