@@ -22,6 +22,7 @@ class PharmacyTicket extends Model
         'patient_nom',
         'patient_prenom',
         'patient_age',
+        'est_cmu',
         'statut',
     ];
 
@@ -31,6 +32,7 @@ class PharmacyTicket extends Model
         'emis_le' => 'datetime',
         'total' => 'decimal:2',
         'patient_age' => 'integer',
+        'est_cmu' => 'boolean',
     ];
 
     /**

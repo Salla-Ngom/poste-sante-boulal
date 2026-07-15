@@ -97,16 +97,29 @@ class PharmacyCashSessionController extends Controller
         $totalVentes = (float) PharmacyTicket::where('cash_session_id', $session->id)
             ->where('statut', 'actif')->sum('total');
 
+        $totalCmu = (float) PharmacyTicket::where('cash_session_id', $session->id)
+            ->where('statut', 'actif')->where('est_cmu', true)->sum('total');
+
+        $nombreCmu = PharmacyTicket::where('cash_session_id', $session->id)
+            ->where('statut', 'actif')->where('est_cmu', true)->count();
+
+        $ventesEspeces = $totalVentes - $totalCmu;
+
         $totalDepenses = (float) Expense::where('cash_session_id', $session->id)->sum('montant');
 
         $nombreTickets = PharmacyTicket::where('cash_session_id', $session->id)
             ->where('statut', 'actif')->count();
 
-        $montantAttendu = (float) $session->fond_caisse_initial + $totalVentes - $totalDepenses;
+        // Les ventes CMU sont gratuites pour le patient :
+        // seules les ventes en espèces entrent dans la caisse
+        $montantAttendu = (float) $session->fond_caisse_initial + $ventesEspeces - $totalDepenses;
 
         return Inertia::render('Pharmacy/Cloture', [
             'session' => $session,
             'totalVentes' => $totalVentes,
+            'totalCmu' => $totalCmu,
+            'nombreCmu' => $nombreCmu,
+            'ventesEspeces' => $ventesEspeces,
             'totalDepenses' => $totalDepenses,
             'nombreTickets' => $nombreTickets,
             'montantAttendu' => $montantAttendu,
@@ -134,12 +147,18 @@ class PharmacyCashSessionController extends Controller
         $totalVentes = (float) PharmacyTicket::where('cash_session_id', $session->id)
             ->where('statut', 'actif')->sum('total');
 
+        $totalCmu = (float) PharmacyTicket::where('cash_session_id', $session->id)
+            ->where('statut', 'actif')->where('est_cmu', true)->sum('total');
+
+        $ventesEspeces = $totalVentes - $totalCmu;
+
         $totalDepenses = (float) Expense::where('cash_session_id', $session->id)->sum('montant');
 
-        $montantAttendu = (float) $session->fond_caisse_initial + $totalVentes - $totalDepenses;
+        // Les ventes CMU ne rapportent pas d'espèces en caisse
+        $montantAttendu = (float) $session->fond_caisse_initial + $ventesEspeces - $totalDepenses;
         $ecart = (float) $validated['montant_compte'] - $montantAttendu;
 
-        DB::transaction(function () use ($session, $user, $validated, $request, $ecart, $totalVentes, $totalDepenses, $montantAttendu) {
+        DB::transaction(function () use ($session, $user, $validated, $request, $ecart, $totalVentes, $totalCmu, $ventesEspeces, $totalDepenses, $montantAttendu) {
 
             $session->update([
                 'fermee_le' => Carbon::now(),
@@ -160,6 +179,8 @@ class PharmacyCashSessionController extends Controller
                     'type_caisse' => 'pharmacie',
                     'fond_initial' => (float) $session->fond_caisse_initial,
                     'total_ventes' => $totalVentes,
+                    'total_cmu' => $totalCmu,
+                    'ventes_especes' => $ventesEspeces,
                     'total_depenses' => $totalDepenses,
                     'montant_attendu' => $montantAttendu,
                     'montant_compte' => (float) $validated['montant_compte'],
@@ -186,8 +207,11 @@ class PharmacyCashSessionController extends Controller
 
         $nombreTickets = $tickets->count();
         $totalVentes = (float) $tickets->sum('total');
+        $totalCmu = (float) $tickets->where('est_cmu', true)->sum('total');
+        $nombreCmu = $tickets->where('est_cmu', true)->count();
+        $ventesEspeces = $totalVentes - $totalCmu;
         $totalDepenses = (float) Expense::where('cash_session_id', $session->id)->sum('montant');
-        $montantAttendu = (float) $session->fond_caisse_initial + $totalVentes - $totalDepenses;
+        $montantAttendu = (float) $session->fond_caisse_initial + $ventesEspeces - $totalDepenses;
 
         $duree = Carbon::parse($session->ouverte_le)->diff(Carbon::parse($session->fermee_le));
         $dureeStr = '';
@@ -201,6 +225,9 @@ class PharmacyCashSessionController extends Controller
             'tickets' => $tickets,
             'nombreTickets' => $nombreTickets,
             'totalVentes' => $totalVentes,
+            'totalCmu' => $totalCmu,
+            'nombreCmu' => $nombreCmu,
+            'ventesEspeces' => $ventesEspeces,
             'totalDepenses' => $totalDepenses,
             'montantAttendu' => $montantAttendu,
             'duree' => $dureeStr,

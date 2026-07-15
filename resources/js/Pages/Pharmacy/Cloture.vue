@@ -6,6 +6,9 @@ import { computed } from 'vue';
 const props = defineProps({
     session: Object,
     totalVentes: Number,
+    totalCmu: Number,
+    nombreCmu: Number,
+    ventesEspeces: Number,
     totalDepenses: Number,
     nombreTickets: Number,
     montantAttendu: Number,
@@ -74,7 +77,15 @@ const formatHeure = (dateString) => {
                                 </div>
                                 <div class="flex justify-between text-sm">
                                     <span class="text-gray-600">Total ventes</span>
-                                    <span class="font-medium text-emerald-600">+ {{ formatFCFA(totalVentes) }}</span>
+                                    <span class="font-medium text-gray-900">{{ formatFCFA(totalVentes) }}</span>
+                                </div>
+                                <div v-if="totalCmu > 0" class="flex justify-between text-sm">
+                                    <span class="text-gray-600">dont ventes CMU ({{ nombreCmu }})</span>
+                                    <span class="font-medium text-blue-600">− {{ formatFCFA(totalCmu) }}</span>
+                                </div>
+                                <div class="flex justify-between text-sm">
+                                    <span class="text-gray-600">Ventes en espèces</span>
+                                    <span class="font-medium text-emerald-600">+ {{ formatFCFA(ventesEspeces) }}</span>
                                 </div>
                                 <div v-if="totalDepenses > 0" class="flex justify-between text-sm">
                                     <span class="text-gray-600">Total dépenses</span>

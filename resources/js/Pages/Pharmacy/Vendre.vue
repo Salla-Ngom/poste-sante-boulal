@@ -16,6 +16,7 @@ const recherche = ref('');
 const form = useForm({
     patient_nom: '',
     patient_prenom: '',
+    est_cmu: false,
     lignes: [],
 });
 
@@ -238,13 +239,35 @@ const badgeStock = (stock) => {
                                         <p v-if="form.errors.patient_nom" class="mt-1 text-xs text-red-600">{{ form.errors.patient_nom }}</p>
                                     </div>
                                 </div>
+
+                                <!-- Prise en charge CMU -->
+                                <label class="mt-3 flex items-center gap-3 p-3 rounded-lg border cursor-pointer transition"
+                                    :class="form.est_cmu ? 'bg-blue-50 border-blue-300' : 'bg-gray-50 border-gray-200'">
+                                    <input
+                                        type="checkbox"
+                                        v-model="form.est_cmu"
+                                        class="w-5 h-5 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                                    />
+                                    <span class="text-sm font-medium" :class="form.est_cmu ? 'text-blue-800' : 'text-gray-700'">
+                                        Prise en charge CMU
+                                        <span class="block text-xs font-normal" :class="form.est_cmu ? 'text-blue-600' : 'text-gray-500'">
+                                            Le patient ne paie rien — la vente n'entre pas en caisse
+                                        </span>
+                                    </span>
+                                </label>
                             </div>
 
                             <!-- Total + actions -->
                             <div v-if="panier.length > 0" class="p-4 border-t-2 border-purple-200 bg-gradient-to-br from-purple-50 to-pink-50">
-                                <div class="flex items-center justify-between mb-3">
+                                <div class="flex items-center justify-between mb-1">
                                     <span class="text-sm font-medium text-gray-700">Total</span>
                                     <span class="text-2xl font-bold text-purple-700">{{ formatFCFA(totalPanier) }}</span>
+                                </div>
+                                <div class="flex items-center justify-between mb-3">
+                                    <span class="text-xs font-medium" :class="form.est_cmu ? 'text-blue-700' : 'text-gray-500'">À encaisser</span>
+                                    <span class="text-sm font-bold" :class="form.est_cmu ? 'text-blue-700' : 'text-gray-700'">
+                                        {{ form.est_cmu ? '0 FCFA (CMU)' : formatFCFA(totalPanier) }}
+                                    </span>
                                 </div>
 
                                 <div class="space-y-2">

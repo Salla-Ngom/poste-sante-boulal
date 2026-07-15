@@ -1,0 +1,285 @@
+diff --git a/app/Http/Controllers/PharmacyCashSessionController.php b/app/Http/Controllers/PharmacyCashSessionController.php
+index c4ba6f4..e52c787 100644
+--- a/app/Http/Controllers/PharmacyCashSessionController.php
++++ b/app/Http/Controllers/PharmacyCashSessionController.php
+@@ -97,16 +97,29 @@ public function showCloture()
+         $totalVentes = (float) PharmacyTicket::where('cash_session_id', $session->id)
+             ->where('statut', 'actif')->sum('total');
+ 
++        $totalCmu = (float) PharmacyTicket::where('cash_session_id', $session->id)
++            ->where('statut', 'actif')->where('est_cmu', true)->sum('total');
++
++        $nombreCmu = PharmacyTicket::where('cash_session_id', $session->id)
++            ->where('statut', 'actif')->where('est_cmu', true)->count();
++
++        $ventesEspeces = $totalVentes - $totalCmu;
++
+         $totalDepenses = (float) Expense::where('cash_session_id', $session->id)->sum('montant');
+ 
+         $nombreTickets = PharmacyTicket::where('cash_session_id', $session->id)
+             ->where('statut', 'actif')->count();
+ 
+-        $montantAttendu = (float) $session->fond_caisse_initial + $totalVentes - $totalDepenses;
++        // Les ventes CMU sont gratuites pour le patient :
++        // seules les ventes en espèces entrent dans la caisse
++        $montantAttendu = (float) $session->fond_caisse_initial + $ventesEspeces - $totalDepenses;
+ 
+         return Inertia::render('Pharmacy/Cloture', [
+             'session' => $session,
+             'totalVentes' => $totalVentes,
++            'totalCmu' => $totalCmu,
++            'nombreCmu' => $nombreCmu,
++            'ventesEspeces' => $ventesEspeces,
+             'totalDepenses' => $totalDepenses,
+             'nombreTickets' => $nombreTickets,
+             'montantAttendu' => $montantAttendu,
+@@ -134,12 +147,18 @@ public function cloturer(Request $request)
+         $totalVentes = (float) PharmacyTicket::where('cash_session_id', $session->id)
+             ->where('statut', 'actif')->sum('total');
+ 
++        $totalCmu = (float) PharmacyTicket::where('cash_session_id', $session->id)
++            ->where('statut', 'actif')->where('est_cmu', true)->sum('total');
++
++        $ventesEspeces = $totalVentes - $totalCmu;
++
+         $totalDepenses = (float) Expense::where('cash_session_id', $session->id)->sum('montant');
+ 
+-        $montantAttendu = (float) $session->fond_caisse_initial + $totalVentes - $totalDepenses;
++        // Les ventes CMU ne rapportent pas d'espèces en caisse
++        $montantAttendu = (float) $session->fond_caisse_initial + $ventesEspeces - $totalDepenses;
+         $ecart = (float) $validated['montant_compte'] - $montantAttendu;
+ 
+-        DB::transaction(function () use ($session, $user, $validated, $request, $ecart, $totalVentes, $totalDepenses, $montantAttendu) {
++        DB::transaction(function () use ($session, $user, $validated, $request, $ecart, $totalVentes, $totalCmu, $ventesEspeces, $totalDepenses, $montantAttendu) {
+ 
+             $session->update([
+                 'fermee_le' => Carbon::now(),
+@@ -160,6 +179,8 @@ public function cloturer(Request $request)
+                     'type_caisse' => 'pharmacie',
+                     'fond_initial' => (float) $session->fond_caisse_initial,
+                     'total_ventes' => $totalVentes,
++                    'total_cmu' => $totalCmu,
++                    'ventes_especes' => $ventesEspeces,
+                     'total_depenses' => $totalDepenses,
+                     'montant_attendu' => $montantAttendu,
+                     'montant_compte' => (float) $validated['montant_compte'],
+@@ -186,8 +207,11 @@ private function genererRapportPDF($session, $user)
+ 
+         $nombreTickets = $tickets->count();
+         $totalVentes = (float) $tickets->sum('total');
++        $totalCmu = (float) $tickets->where('est_cmu', true)->sum('total');
++        $nombreCmu = $tickets->where('est_cmu', true)->count();
++        $ventesEspeces = $totalVentes - $totalCmu;
+         $totalDepenses = (float) Expense::where('cash_session_id', $session->id)->sum('montant');
+-        $montantAttendu = (float) $session->fond_caisse_initial + $totalVentes - $totalDepenses;
++        $montantAttendu = (float) $session->fond_caisse_initial + $ventesEspeces - $totalDepenses;
+ 
+         $duree = Carbon::parse($session->ouverte_le)->diff(Carbon::parse($session->fermee_le));
+         $dureeStr = '';
+@@ -201,6 +225,9 @@ private function genererRapportPDF($session, $user)
+             'tickets' => $tickets,
+             'nombreTickets' => $nombreTickets,
+             'totalVentes' => $totalVentes,
++            'totalCmu' => $totalCmu,
++            'nombreCmu' => $nombreCmu,
++            'ventesEspeces' => $ventesEspeces,
+             'totalDepenses' => $totalDepenses,
+             'montantAttendu' => $montantAttendu,
+             'duree' => $dureeStr,
+diff --git a/app/Http/Controllers/PharmacyTicketController.php b/app/Http/Controllers/PharmacyTicketController.php
+index e9cc018..1bf884f 100644
+--- a/app/Http/Controllers/PharmacyTicketController.php
++++ b/app/Http/Controllers/PharmacyTicketController.php
+@@ -62,6 +62,7 @@ public function store(Request $request)
+         $validated = $request->validate([
+             'patient_nom' => 'required|string|max:100',
+             'patient_prenom' => 'required|string|max:100',
++            'est_cmu' => 'sometimes|boolean',
+             'lignes' => 'required|array|min:1',
+             'lignes.*.medicament_id' => 'required|exists:medicaments,id',
+             'lignes.*.quantite' => 'required|integer|min:1',
+@@ -143,6 +144,7 @@ public function store(Request $request)
+                 'patient_nom' => $validated['patient_nom'],
+                 'patient_prenom' => $validated['patient_prenom'],
+                 'patient_age' => null, // Pas demandé selon décision client
++                'est_cmu' => (bool) ($validated['est_cmu'] ?? false),
+                 'statut' => 'actif',
+             ]);
+ 
+diff --git a/app/Models/PharmacyTicket.php b/app/Models/PharmacyTicket.php
+index 1c60741..65d5b17 100644
+--- a/app/Models/PharmacyTicket.php
++++ b/app/Models/PharmacyTicket.php
+@@ -22,6 +22,7 @@ class PharmacyTicket extends Model
+         'patient_nom',
+         'patient_prenom',
+         'patient_age',
++        'est_cmu',
+         'statut',
+     ];
+ 
+@@ -31,6 +32,7 @@ class PharmacyTicket extends Model
+         'emis_le' => 'datetime',
+         'total' => 'decimal:2',
+         'patient_age' => 'integer',
++        'est_cmu' => 'boolean',
+     ];
+ 
+     /**
+diff --git a/database/migrations/2026_07_13_100000_add_est_cmu_to_pharmacy_tickets.php b/database/migrations/2026_07_13_100000_add_est_cmu_to_pharmacy_tickets.php
+new file mode 100644
+index 0000000..c649c7b
+--- /dev/null
++++ b/database/migrations/2026_07_13_100000_add_est_cmu_to_pharmacy_tickets.php
+@@ -0,0 +1,28 @@
++<?php
++
++use Illuminate\Database\Migrations\Migration;
++use Illuminate\Database\Schema\Blueprint;
++use Illuminate\Support\Facades\Schema;
++
++return new class extends Migration
++{
++    /**
++     * Prise en charge CMU sur les ventes pharmacie.
++     * Une vente CMU est gratuite pour le patient : elle compte dans les
++     * ventes (valeur, stock, statistiques) mais PAS dans les espèces
++     * attendues en caisse à la clôture.
++     */
++    public function up(): void
++    {
++        Schema::table('pharmacy_tickets', function (Blueprint $table) {
++            $table->boolean('est_cmu')->default(false)->after('patient_age');
++        });
++    }
++
++    public function down(): void
++    {
++        Schema::table('pharmacy_tickets', function (Blueprint $table) {
++            $table->dropColumn('est_cmu');
++        });
++    }
++};
+diff --git a/resources/js/Pages/Pharmacy/Cloture.vue b/resources/js/Pages/Pharmacy/Cloture.vue
+index 5ef2eea..05a44c5 100644
+--- a/resources/js/Pages/Pharmacy/Cloture.vue
++++ b/resources/js/Pages/Pharmacy/Cloture.vue
+@@ -6,6 +6,9 @@ import { computed } from 'vue';
+ const props = defineProps({
+     session: Object,
+     totalVentes: Number,
++    totalCmu: Number,
++    nombreCmu: Number,
++    ventesEspeces: Number,
+     totalDepenses: Number,
+     nombreTickets: Number,
+     montantAttendu: Number,
+@@ -74,7 +77,15 @@ const formatHeure = (dateString) => {
+                                 </div>
+                                 <div class="flex justify-between text-sm">
+                                     <span class="text-gray-600">Total ventes</span>
+-                                    <span class="font-medium text-emerald-600">+ {{ formatFCFA(totalVentes) }}</span>
++                                    <span class="font-medium text-gray-900">{{ formatFCFA(totalVentes) }}</span>
++                                </div>
++                                <div v-if="totalCmu > 0" class="flex justify-between text-sm">
++                                    <span class="text-gray-600">dont ventes CMU ({{ nombreCmu }})</span>
++                                    <span class="font-medium text-blue-600">− {{ formatFCFA(totalCmu) }}</span>
++                                </div>
++                                <div class="flex justify-between text-sm">
++                                    <span class="text-gray-600">Ventes en espèces</span>
++                                    <span class="font-medium text-emerald-600">+ {{ formatFCFA(ventesEspeces) }}</span>
+                                 </div>
+                                 <div v-if="totalDepenses > 0" class="flex justify-between text-sm">
+                                     <span class="text-gray-600">Total dépenses</span>
+diff --git a/resources/js/Pages/Pharmacy/Recu.vue b/resources/js/Pages/Pharmacy/Recu.vue
+index f2b7fdc..b9049f2 100644
+--- a/resources/js/Pages/Pharmacy/Recu.vue
++++ b/resources/js/Pages/Pharmacy/Recu.vue
+@@ -150,6 +150,14 @@ const reimprimer = () => {
+                             {{ formatFCFA(ticket.total) }}
+                         </span>
+                     </div>
++
++                    <!-- Prise en charge CMU -->
++                    <div v-if="ticket.est_cmu" class="mt-2 bg-blue-50 border border-blue-200 rounded-lg p-3">
++                        <div class="flex justify-between items-center">
++                            <span class="text-sm font-bold text-blue-800">PRISE EN CHARGE CMU</span>
++                            <span class="text-lg font-bold text-blue-700">À payer : 0 FCFA</span>
++                        </div>
++                    </div>
+                 </div>
+ 
+                 <!-- Pied -->
+diff --git a/resources/js/Pages/Pharmacy/Vendre.vue b/resources/js/Pages/Pharmacy/Vendre.vue
+index b497f2c..f8c2828 100644
+--- a/resources/js/Pages/Pharmacy/Vendre.vue
++++ b/resources/js/Pages/Pharmacy/Vendre.vue
+@@ -16,6 +16,7 @@ const recherche = ref('');
+ const form = useForm({
+     patient_nom: '',
+     patient_prenom: '',
++    est_cmu: false,
+     lignes: [],
+ });
+ 
+@@ -238,14 +239,36 @@ const badgeStock = (stock) => {
+                                         <p v-if="form.errors.patient_nom" class="mt-1 text-xs text-red-600">{{ form.errors.patient_nom }}</p>
+                                     </div>
+                                 </div>
++
++                                <!-- Prise en charge CMU -->
++                                <label class="mt-3 flex items-center gap-3 p-3 rounded-lg border cursor-pointer transition"
++                                    :class="form.est_cmu ? 'bg-blue-50 border-blue-300' : 'bg-gray-50 border-gray-200'">
++                                    <input
++                                        type="checkbox"
++                                        v-model="form.est_cmu"
++                                        class="w-5 h-5 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
++                                    />
++                                    <span class="text-sm font-medium" :class="form.est_cmu ? 'text-blue-800' : 'text-gray-700'">
++                                        Prise en charge CMU
++                                        <span class="block text-xs font-normal" :class="form.est_cmu ? 'text-blue-600' : 'text-gray-500'">
++                                            Le patient ne paie rien — la vente n'entre pas en caisse
++                                        </span>
++                                    </span>
++                                </label>
+                             </div>
+ 
+                             <!-- Total + actions -->
+                             <div v-if="panier.length > 0" class="p-4 border-t-2 border-purple-200 bg-gradient-to-br from-purple-50 to-pink-50">
+-                                <div class="flex items-center justify-between mb-3">
++                                <div class="flex items-center justify-between mb-1">
+                                     <span class="text-sm font-medium text-gray-700">Total</span>
+                                     <span class="text-2xl font-bold text-purple-700">{{ formatFCFA(totalPanier) }}</span>
+                                 </div>
++                                <div class="flex items-center justify-between mb-3">
++                                    <span class="text-xs font-medium" :class="form.est_cmu ? 'text-blue-700' : 'text-gray-500'">À encaisser</span>
++                                    <span class="text-sm font-bold" :class="form.est_cmu ? 'text-blue-700' : 'text-gray-700'">
++                                        {{ form.est_cmu ? '0 FCFA (CMU)' : formatFCFA(totalPanier) }}
++                                    </span>
++                                </div>
+ 
+                                 <div class="space-y-2">
+                                     <button
+diff --git a/resources/views/pdfs/rapport_pharmacie.blade.php b/resources/views/pdfs/rapport_pharmacie.blade.php
+index 93fde0b..a098572 100644
+--- a/resources/views/pdfs/rapport_pharmacie.blade.php
++++ b/resources/views/pdfs/rapport_pharmacie.blade.php
+@@ -70,7 +70,17 @@
+     </div>
+     <div class="summary-row">
+         <div class="summary-label">Total des ventes ({{ $nombreTickets }} tickets)</div>
+-        <div class="summary-value" style="color:#047857;">+ {{ number_format($totalVentes, 0, ',', ' ') }} FCFA</div>
++        <div class="summary-value">{{ number_format($totalVentes, 0, ',', ' ') }} FCFA</div>
++    </div>
++    @if(($totalCmu ?? 0) > 0)
++    <div class="summary-row">
++        <div class="summary-label">dont prises en charge CMU ({{ $nombreCmu }} tickets)</div>
++        <div class="summary-value" style="color:#1d4ed8;">− {{ number_format($totalCmu, 0, ',', ' ') }} FCFA</div>
++    </div>
++    @endif
++    <div class="summary-row">
++        <div class="summary-label">Ventes en espèces</div>
++        <div class="summary-value" style="color:#047857;">+ {{ number_format($ventesEspeces ?? $totalVentes, 0, ',', ' ') }} FCFA</div>
+     </div>
+     @if($totalDepenses > 0)
+     <div class="summary-row">

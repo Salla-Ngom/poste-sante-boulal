@@ -150,6 +150,14 @@ const reimprimer = () => {
                             {{ formatFCFA(ticket.total) }}
                         </span>
                     </div>
+
+                    <!-- Prise en charge CMU -->
+                    <div v-if="ticket.est_cmu" class="mt-2 bg-blue-50 border border-blue-200 rounded-lg p-3">
+                        <div class="flex justify-between items-center">
+                            <span class="text-sm font-bold text-blue-800">PRISE EN CHARGE CMU</span>
+                            <span class="text-lg font-bold text-blue-700">À payer : 0 FCFA</span>
+                        </div>
+                    </div>
                 </div>
 
                 <!-- Pied -->

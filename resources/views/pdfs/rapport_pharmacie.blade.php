@@ -70,7 +70,17 @@
     </div>
     <div class="summary-row">
         <div class="summary-label">Total des ventes ({{ $nombreTickets }} tickets)</div>
-        <div class="summary-value" style="color:#047857;">+ {{ number_format($totalVentes, 0, ',', ' ') }} FCFA</div>
+        <div class="summary-value">{{ number_format($totalVentes, 0, ',', ' ') }} FCFA</div>
+    </div>
+    @if(($totalCmu ?? 0) > 0)
+    <div class="summary-row">
+        <div class="summary-label">dont prises en charge CMU ({{ $nombreCmu }} tickets)</div>
+        <div class="summary-value" style="color:#1d4ed8;">− {{ number_format($totalCmu, 0, ',', ' ') }} FCFA</div>
+    </div>
+    @endif
+    <div class="summary-row">
+        <div class="summary-label">Ventes en espèces</div>
+        <div class="summary-value" style="color:#047857;">+ {{ number_format($ventesEspeces ?? $totalVentes, 0, ',', ' ') }} FCFA</div>
     </div>
     @if($totalDepenses > 0)
     <div class="summary-row">

@@ -62,6 +62,7 @@ class PharmacyTicketController extends Controller
         $validated = $request->validate([
             'patient_nom' => 'required|string|max:100',
             'patient_prenom' => 'required|string|max:100',
+            'est_cmu' => 'sometimes|boolean',
             'lignes' => 'required|array|min:1',
             'lignes.*.medicament_id' => 'required|exists:medicaments,id',
             'lignes.*.quantite' => 'required|integer|min:1',
@@ -143,6 +144,7 @@ class PharmacyTicketController extends Controller
                 'patient_nom' => $validated['patient_nom'],
                 'patient_prenom' => $validated['patient_prenom'],
                 'patient_age' => null, // Pas demandé selon décision client
+                'est_cmu' => (bool) ($validated['est_cmu'] ?? false),
                 'statut' => 'actif',
             ]);
 
