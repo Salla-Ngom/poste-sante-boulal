@@ -104,7 +104,7 @@ const reimprimer = () => imprimer()
 <template>
     <Head title="Reçu - PS Boulal" />
 
-    <div class="min-h-screen bg-gray-100 py-8 print:bg-white print:py-0">
+    <div class="min-h-screen print:min-h-0 bg-gray-100 py-8 print:bg-white print:py-0">
 
         <!-- ===== Barre d'actions (cachée à l'impression) ===== -->
         <div class="max-w-md mx-auto px-4 mb-4 print:hidden">
@@ -234,8 +234,11 @@ const reimprimer = () => imprimer()
 <style>
 @media print {
     @page {
-        margin: 0.5cm;
+        margin: 0;
         size: 80mm auto;
+    }
+    html, body {
+        height: auto !important;
     }
     body {
         -webkit-print-color-adjust: exact;

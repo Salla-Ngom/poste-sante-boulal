@@ -11,7 +11,7 @@
         <link rel="manifest" href="/poste-sante-boulal/public/manifest.webmanifest">
         <meta name="theme-color" content="#059669">
         <meta name="mobile-web-app-capable" content="yes">
-
+<link rel="icon" href="/poste-sante-boulal/public/favicon.ico">
         <!-- Fonts -->
         <link rel="preconnect" href="https://fonts.bunny.net">
         <link href="https://fonts.bunny.net/css?family=figtree:400,500,600&display=swap" rel="stylesheet" />
